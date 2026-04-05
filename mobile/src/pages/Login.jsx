@@ -131,25 +131,25 @@ export default function Login() {
               border: '1px solid rgba(255,255,255,0.07)',
             }}
           >
-            {/* Language toggle */}
-            <button
-              type="button"
-              onClick={toggleLanguage}
-              className="absolute top-4 right-4 flex items-center justify-center w-9 h-9 rounded-xl text-lg touch-manipulation"
-              style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.09)',
-              }}
-              aria-label="Toggle language"
-            >
-              {lang === 'en' ? '🇩🇿' : '🇬🇧'}
-            </button>
-
-            <div className="mb-6">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#D4A574' }}>
-                {t('welcomeBack')}
-              </p>
-              <h2 className="text-xl font-bold text-white">{t('signInToContinue')}</h2>
+            <div className="flex items-start justify-between gap-3 mb-6">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#D4A574' }}>
+                  {t('welcomeBack')}
+                </p>
+                <h2 className="text-xl font-bold text-white">{t('signInToContinue')}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={toggleLanguage}
+                className="flex items-center justify-center w-9 h-9 rounded-xl text-lg touch-manipulation flex-shrink-0 mt-1"
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.09)',
+                }}
+                aria-label="Toggle language"
+              >
+                {lang === 'en' ? '🇩🇿' : '🇬🇧'}
+              </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
