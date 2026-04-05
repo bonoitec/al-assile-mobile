@@ -6,13 +6,17 @@ WORKDIR /app
 
 # Install server dependencies
 COPY package*.json ./
-RUN npm ci --production
+RUN npm install
 
 # Copy server
 COPY server/ ./server/
 
-# Copy pre-built mobile frontend
-COPY mobile/dist/ ./mobile/dist/
+# Install and build mobile frontend
+COPY mobile/package*.json ./mobile/
+RUN cd mobile && npm install
+
+COPY mobile/ ./mobile/
+RUN cd mobile && npm run build
 
 EXPOSE 3000
 

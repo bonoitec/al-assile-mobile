@@ -1,10 +1,9 @@
 services:
   - type: web
     name: al-assile-mobile
-    runtime: node
-    buildCommand: cd mobile && npm install && npm run build && cd .. && npm install
-    startCommand: node server/index.js
+    runtime: docker
     plan: free
+    region: frankfurt
     envVars:
       - key: JWT_SECRET
         generateValue: true
