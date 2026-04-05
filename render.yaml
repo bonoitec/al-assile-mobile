@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: al-assile-mobile
+    runtime: node
+    buildCommand: cd mobile && npm install && npm run build && cd .. && npm install
+    startCommand: node server/index.js
+    plan: free
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SYNC_API_KEY
+        generateValue: true
+      - key: NODE_ENV
+        value: production

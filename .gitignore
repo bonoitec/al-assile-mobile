@@ -1,0 +1,10 @@
+node_modules/
+data/
+mobile/node_modules/
+mobile/dist/
+*.db
+*.db-journal
+*.db-wal
+.env
+test-*.js
+mobile/public/generate-icons.html

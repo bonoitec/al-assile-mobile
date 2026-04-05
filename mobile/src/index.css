@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+
+  html {
+    height: 100%;
+    height: -webkit-fill-available;
+  }
+
+  body {
+    height: 100%;
+    min-height: -webkit-fill-available;
+    overscroll-behavior: none;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #080c14;
+    color: #fff;
+  }
+
+  #root {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Custom dark scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(212, 165, 116, 0.2);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 165, 116, 0.4);
+  }
+
+  /* iOS input zoom prevention */
+  input[type='text'],
+  input[type='password'],
+  input[type='number'],
+  input[type='email'],
+  input[type='search'],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+@layer components {
+  /* Safe area padding utility */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4rem);
+  }
+
+  /* Gold gradient button */
+  .btn-gold {
+    background: linear-gradient(135deg, #8B6914 0%, #D4A574 100%);
+    color: #fff;
+    border: 1px solid rgba(212, 165, 116, 0.3);
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+
+  .btn-gold:active {
+    transform: scale(0.97);
+    opacity: 0.92;
+  }
+
+  /* Glass card */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(8px);
+  }
+
+  /* Dark input */
+  .input-dark {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .input-dark::placeholder {
+    color: #4a5568;
+  }
+
+  .input-dark:focus {
+    border-color: rgba(212, 165, 116, 0.4);
+  }
+
+  /* Touch-friendly scroll */
+  .scroll-touch {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+  }
+
+  /* Smooth press effect */
+  .press-effect {
+    transition: transform 0.1s ease;
+  }
+
+  .press-effect:active {
+    transform: scale(0.96);
+  }
+}
+
+@layer utilities {
+  /* Bottom nav height */
+  .bottom-nav-height {
+    height: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Content area with nav offset */
+  .content-with-nav {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Notch top spacing */
+  .pt-notch {
+    padding-top: max(env(safe-area-inset-top, 0px), 0.75rem);
+  }
+
+  /* Touch manipulation for all interactive elements */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+}
