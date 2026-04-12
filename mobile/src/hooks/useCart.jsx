@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 
 const CartContext = createContext(null);
 
@@ -114,20 +114,23 @@ export function CartProvider({ children }) {
 
   const isInCart = useCallback((productId) => items.has(productId), [items]);
 
+  // Memoize value to prevent all consumers from re-rendering on every provider render
+  const value = useMemo(() => ({
+    items,
+    client,
+    addItem,
+    removeItem,
+    updateQuantity,
+    setClient,
+    clear,
+    getTotal,
+    getItemCount,
+    getItemsArray,
+    isInCart,
+  }), [items, client, addItem, removeItem, updateQuantity, setClient, clear, getTotal, getItemCount, getItemsArray, isInCart]);
+
   return (
-    <CartContext.Provider value={{
-      items,
-      client,
-      addItem,
-      removeItem,
-      updateQuantity,
-      setClient,
-      clear,
-      getTotal,
-      getItemCount,
-      getItemsArray,
-      isInCart,
-    }}>
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   );

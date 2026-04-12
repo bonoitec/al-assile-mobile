@@ -38,11 +38,13 @@ export default function Login() {
   const from = location.state?.from?.pathname || '/';
 
   // Auto-redirect if already logged in (session remembered)
+  // Only on initial mount — prevents redirect loops if API calls return 401
   React.useEffect(() => {
-    if (isAuthenticated) {
-      navigate(from, { replace: true });
+    if (isAuthenticated && from === '/') {
+      navigate('/', { replace: true });
     }
-  }, [isAuthenticated]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleLanguage = () => {
     const next = lang === 'en' ? 'ar' : 'en';

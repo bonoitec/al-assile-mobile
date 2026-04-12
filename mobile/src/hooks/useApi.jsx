@@ -1,36 +1,32 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export function useApi() {
   const navigate = useNavigate();
-
-  const getToken = () => localStorage.getItem('mobile_token');
+  const navigatingToLoginRef = useRef(false);
 
   const request = useCallback(async (method, path, body = undefined) => {
-    const token = getToken();
-    const headers = {
-      'Content-Type': 'application/json',
-    };
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    const token = localStorage.getItem('mobile_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const options = { method, headers };
-    if (body !== undefined) {
-      options.body = JSON.stringify(body);
-    }
+    if (body !== undefined) options.body = JSON.stringify(body);
 
     const res = await fetch(path, options);
 
     if (res.status === 401) {
-      localStorage.removeItem('mobile_token');
-      localStorage.removeItem('mobile_user');
-      navigate('/login');
+      // Prevent navigation loop: only navigate once per unauthorized batch
+      if (!navigatingToLoginRef.current) {
+        navigatingToLoginRef.current = true;
+        localStorage.removeItem('mobile_token');
+        localStorage.removeItem('mobile_user');
+        navigate('/login', { replace: true });
+        setTimeout(() => { navigatingToLoginRef.current = false; }, 1000);
+      }
       throw new Error('Session expired. Please log in again.');
     }
 
-    // Handle no-content responses
     if (res.status === 204) return null;
 
     const json = await res.json();
@@ -40,15 +36,16 @@ export function useApi() {
       throw new Error(message);
     }
 
-    // Unwrap { success: true, data: ... } envelope — return payload directly
     return json.data !== undefined ? json.data : json;
   }, [navigate]);
 
-  return {
+  // Memoize the returned object so its reference is stable across renders.
+  // This prevents effects that depend on `api` from re-running infinitely.
+  return useMemo(() => ({
     get: (path) => request('GET', path),
     post: (path, body) => request('POST', path, body),
     put: (path, body) => request('PUT', path, body),
     patch: (path, body) => request('PATCH', path, body),
     delete: (path) => request('DELETE', path),
-  };
+  }), [request]);
 }

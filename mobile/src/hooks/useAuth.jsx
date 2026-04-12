@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -49,8 +49,14 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  // Memoize the context value so consumers don't re-render on every AuthProvider render
+  const value = useMemo(
+    () => ({ user, token, login, logout, isAuthenticated: !!token }),
+    [user, token, login, logout]
+  );
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
