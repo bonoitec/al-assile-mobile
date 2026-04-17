@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -48,6 +48,19 @@ export function AuthProvider({ children }) {
     setToken(null);
     setUser(null);
   }, []);
+
+  // Keep state in sync if localStorage is cleared externally (e.g. useApi on 401)
+  useEffect(() => {
+    const syncFromStorage = () => {
+      const storedToken = localStorage.getItem('mobile_token');
+      if (!storedToken && token) {
+        setToken(null);
+        setUser(null);
+      }
+    };
+    window.addEventListener('storage', syncFromStorage);
+    return () => window.removeEventListener('storage', syncFromStorage);
+  }, [token]);
 
   // Memoize the context value so consumers don't re-render on every AuthProvider render
   const value = useMemo(

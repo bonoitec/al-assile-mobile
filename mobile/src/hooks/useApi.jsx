@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from './useAuth.jsx';
 
 export function useApi() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const navigatingToLoginRef = useRef(false);
 
   const request = useCallback(async (method, path, body = undefined) => {
@@ -16,13 +18,13 @@ export function useApi() {
     const res = await fetch(path, options);
 
     if (res.status === 401) {
-      // Prevent navigation loop: only navigate once per unauthorized batch
+      // Critical: call logout() to clear AuthContext state, not just localStorage.
+      // Otherwise AuthProvider still thinks user is authenticated → loop.
       if (!navigatingToLoginRef.current) {
         navigatingToLoginRef.current = true;
-        localStorage.removeItem('mobile_token');
-        localStorage.removeItem('mobile_user');
+        logout();
         navigate('/login', { replace: true });
-        setTimeout(() => { navigatingToLoginRef.current = false; }, 1000);
+        setTimeout(() => { navigatingToLoginRef.current = false; }, 2000);
       }
       throw new Error('Session expired. Please log in again.');
     }
@@ -37,10 +39,8 @@ export function useApi() {
     }
 
     return json.data !== undefined ? json.data : json;
-  }, [navigate]);
+  }, [navigate, logout]);
 
-  // Memoize the returned object so its reference is stable across renders.
-  // This prevents effects that depend on `api` from re-running infinitely.
   return useMemo(() => ({
     get: (path) => request('GET', path),
     post: (path, body) => request('POST', path, body),
