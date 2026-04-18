@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ScanLine } from 'lucide-react';
+import { X, ScanLine, Check } from 'lucide-react';
 import { t } from '../utils/i18n.js';
 
 /*
@@ -15,16 +15,21 @@ import { t } from '../utils/i18n.js';
 export default function BarcodeScanner({ isOpen, onScan, onClose }) {
   const scannerRef = useRef(null);
   const containerRef = useRef(null);
+  // Freeze the viewfinder on a "scanned!" state briefly so the user sees
+  // positive feedback instead of a black frame during camera release.
+  const [scanned, setScanned] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setScanned(false);
+      return;
+    }
 
     let html5QrcodeInstance = null;
     let stopped = false;
 
     const startScanner = async () => {
       try {
-        // Dynamically import to avoid issues if library not loaded
         const { Html5Qrcode } = await import('html5-qrcode');
 
         // Wait for the DOM element to be available
@@ -41,10 +46,23 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
           (decodedText) => {
             if (stopped) return;
             stopped = true;
-            html5QrcodeInstance.stop().catch(() => {}).finally(() => {
-              onScan(decodedText);
-              onClose();
-            });
+
+            // Show the success overlay IMMEDIATELY so the user gets instant
+            // visual confirmation instead of a black viewfinder while the
+            // MediaStream releases (100-500ms on mobile).
+            setScanned(true);
+
+            // Deliver the scan right away — don't wait for the camera to
+            // finish releasing. The parent page will add to cart + show a toast.
+            try { onScan(decodedText); } catch (e) { console.error('onScan handler threw:', e); }
+
+            // Stop the camera in the background; the cleanup effect will also
+            // call stop() when isOpen flips to false. Both are safe (catch swallows).
+            html5QrcodeInstance.stop().catch(() => {});
+
+            // Close the modal after a short beat so the success state is visible.
+            // Without this delay the modal animates out before the checkmark registers.
+            setTimeout(() => onClose(), 180);
           },
           () => {
             // Scan error — suppress, happens constantly while scanning
@@ -146,6 +164,34 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
               className="w-full h-full rounded-2xl overflow-hidden"
               style={{ background: '#000' }}
             />
+
+            {/* Success overlay — covers the viewfinder the instant a scan succeeds
+                so the user sees a green check instead of the black frame that
+                results while the MediaStream is releasing. */}
+            <AnimatePresence>
+              {scanned && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 rounded-2xl flex items-center justify-center"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(16,185,129,0.92) 0%, rgba(5,150,105,0.92) 100%)',
+                  }}
+                >
+                  <motion.div
+                    initial={{ scale: 0.5 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+                    className="w-20 h-20 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(255,255,255,0.25)' }}
+                  >
+                    <Check size={44} strokeWidth={3} style={{ color: '#fff' }} />
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Scanning status */}
@@ -153,12 +199,12 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
             <div
               className="w-2 h-2 rounded-full"
               style={{
-                background: '#D4A574',
-                animation: 'statusBlink 1.2s ease-in-out infinite',
+                background: scanned ? '#10b981' : '#D4A574',
+                animation: scanned ? 'none' : 'statusBlink 1.2s ease-in-out infinite',
               }}
             />
-            <p className="text-sm font-medium" style={{ color: '#8B7355' }}>
-              {t('scanning')}
+            <p className="text-sm font-medium" style={{ color: scanned ? '#10b981' : '#8B7355' }}>
+              {scanned ? (t('scanned') || 'Scanned!') : t('scanning')}
             </p>
           </div>
 
