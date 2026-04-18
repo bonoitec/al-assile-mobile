@@ -91,18 +91,57 @@ export default function Products() {
     navigate('/login');
   };
 
-  const handleBarcodeScan = useCallback((barcode) => {
-    // Search by barcode field, then by name as fallback
-    const found = products.find(
-      p => p.barcode === barcode || p.sku === barcode
-    );
-    if (found) {
-      addItem(found, 1);
-      showScanFeedback('success', `${t('added')}: ${found.name}`);
-    } else {
-      showScanFeedback('error', `${t('noProductForBarcode')}: ${barcode}`);
+  const handleBarcodeScan = useCallback(async (raw) => {
+    // Normalize: trim whitespace + strip any CR/LF/TAB that some scanners append
+    // as a terminator emulation. Without this, "1234567\r" !== "1234567".
+    const barcode = String(raw || '').replace(/[\r\n\t]/g, '').trim();
+    if (!barcode) return;
+
+    // Try exact match against in-memory products first (fastest, offline-safe)
+    let found = products.find(p => p.barcode === barcode);
+
+    // Leading-zero normalization fallback: admin may have typed "12345" but
+    // the scanner emits the EAN-13 padded "0000000012345" (or vice-versa).
+    // Compare with leading zeros stripped from both sides.
+    if (!found) {
+      const scannedStripped = barcode.replace(/^0+/, '');
+      if (scannedStripped) {
+        found = products.find(p => {
+          if (!p.barcode) return false;
+          const storedStripped = String(p.barcode).replace(/^0+/, '');
+          return storedStripped === scannedStripped;
+        });
+      }
     }
-  }, [products, addItem]);
+
+    // Server fallback: products added after this session loaded aren't in the
+    // in-memory array yet. Ask the server directly before giving up.
+    if (!found) {
+      try {
+        const remote = await api.get('/api/products/barcode/' + encodeURIComponent(barcode));
+        if (remote && remote.data && remote.data.id) {
+          found = remote.data;
+        }
+      } catch {
+        // 404 = not found (expected); network errors silently fall through.
+      }
+    }
+
+    if (!found) {
+      showScanFeedback('error', `${t('noProductForBarcode')}: ${barcode}`);
+      return;
+    }
+
+    // Out-of-stock guard: addItem would otherwise store a quantity-0 cart line
+    // because Math.min(1, 0) = 0, leaving a ghost entry the cashier has to delete.
+    if ((found.quantity ?? 0) <= 0) {
+      showScanFeedback('error', `${found.name}: ${t('outOfStock') || 'out of stock'}`);
+      return;
+    }
+
+    addItem(found, 1);
+    showScanFeedback('success', `${t('added')}: ${found.name}`);
+  }, [products, addItem, api]);
 
   return (
     <div className="h-full flex flex-col" style={{ background: '#080c14' }}>
@@ -281,6 +320,9 @@ export default function Products() {
       <AnimatePresence>
         {scanNotification && (
           <motion.div
+            role={scanNotification.type === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+            aria-atomic="true"
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}

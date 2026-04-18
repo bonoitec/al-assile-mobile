@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ScanLine, Check } from 'lucide-react';
+import { X, ScanLine, Check, AlertTriangle } from 'lucide-react';
 import { t } from '../utils/i18n.js';
 
 /*
@@ -14,14 +14,35 @@ import { t } from '../utils/i18n.js';
 
 export default function BarcodeScanner({ isOpen, onScan, onClose }) {
   const scannerRef = useRef(null);
-  const containerRef = useRef(null);
-  // Freeze the viewfinder on a "scanned!" state briefly so the user sees
-  // positive feedback instead of a black frame during camera release.
+  // Unique DOM id per mount — html5-qrcode targets by id, so reusing a singleton
+  // "barcode-reader" across rapid open/close/open can race with an in-flight
+  // previous instance that still holds the node. useId() makes each mount
+  // address its own private element.
+  const readerId = useId().replace(/:/g, '-') + '-barcode-reader';
+
+  // Success flash state — covers the viewfinder on scan so the user sees a
+  // green check instead of a black frame during MediaStream release.
   const [scanned, setScanned] = useState(false);
+  // User-facing error (camera denied, no camera, etc.) — replaces the silent
+  // empty-viewfinder state where the modal would just look frozen.
+  const [startError, setStartError] = useState(null);
+
+  // Keep onScan fresh via a ref so the effect (which only re-runs on isOpen)
+  // always calls the LATEST handler. Without this, mid-session updates to the
+  // `products` list that regenerate handleBarcodeScan would be ignored.
+  const onScanRef = useRef(onScan);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onScanRef.current = onScan; }, [onScan]);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  // Tracked close-after-success timer so we can cancel it if the user dismisses
+  // the modal manually during the 180ms window.
+  const closeTimerRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) {
       setScanned(false);
+      setStartError(null);
       return;
     }
 
@@ -35,9 +56,9 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
         // Wait for the DOM element to be available
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        if (stopped || !document.getElementById('barcode-reader')) return;
+        if (stopped || !document.getElementById(readerId)) return;
 
-        html5QrcodeInstance = new Html5Qrcode('barcode-reader');
+        html5QrcodeInstance = new Html5Qrcode(readerId);
         scannerRef.current = html5QrcodeInstance;
 
         await html5QrcodeInstance.start(
@@ -52,17 +73,19 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
             // MediaStream releases (100-500ms on mobile).
             setScanned(true);
 
-            // Deliver the scan right away — don't wait for the camera to
-            // finish releasing. The parent page will add to cart + show a toast.
-            try { onScan(decodedText); } catch (e) { console.error('onScan handler threw:', e); }
+            // Deliver the scan right away via ref (fresh handler, not stale).
+            try { onScanRef.current && onScanRef.current(decodedText); }
+            catch (e) { console.error('onScan handler threw:', e); }
 
             // Stop the camera in the background; the cleanup effect will also
             // call stop() when isOpen flips to false. Both are safe (catch swallows).
             html5QrcodeInstance.stop().catch(() => {});
 
             // Close the modal after a short beat so the success state is visible.
-            // Without this delay the modal animates out before the checkmark registers.
-            setTimeout(() => onClose(), 180);
+            closeTimerRef.current = setTimeout(() => {
+              closeTimerRef.current = null;
+              onCloseRef.current && onCloseRef.current();
+            }, 180);
           },
           () => {
             // Scan error — suppress, happens constantly while scanning
@@ -70,6 +93,18 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
         );
       } catch (err) {
         console.error('BarcodeScanner start error:', err);
+        // Translate common errors into user-facing messages. The modal otherwise
+        // just shows an empty black viewfinder and users think it's frozen.
+        const msg = String(err && (err.message || err.name) || '');
+        if (/NotAllowed|Permission|denied/i.test(msg)) {
+          setStartError('permission');
+        } else if (/NotFound|NotReadable|camera/i.test(msg)) {
+          setStartError('no-camera');
+        } else if (/Not supported|secure/i.test(msg)) {
+          setStartError('insecure');
+        } else {
+          setStartError('unknown');
+        }
       }
     };
 
@@ -77,12 +112,16 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
 
     return () => {
       stopped = true;
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
       if (scannerRef.current) {
         scannerRef.current.stop().catch(() => {});
         scannerRef.current = null;
       }
     };
-  }, [isOpen]);
+  }, [isOpen, readerId]);
 
   return (
     <AnimatePresence>
@@ -104,7 +143,7 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
               background: 'rgba(255,255,255,0.1)',
               border: '1px solid rgba(255,255,255,0.12)',
             }}
-            aria-label="Close scanner"
+            aria-label={t('closeScanner') || 'Close scanner'}
           >
             <X size={20} style={{ color: '#fff' }} />
           </button>
@@ -157,13 +196,40 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
               }}
             />
 
-            {/* The actual scanner element */}
+            {/* The actual scanner element — unique id per mount */}
             <div
-              id="barcode-reader"
-              ref={containerRef}
+              id={readerId}
               className="w-full h-full rounded-2xl overflow-hidden"
               style={{ background: '#000' }}
             />
+
+            {/* Error overlay — shown when camera start fails (permission denied,
+                no camera, HTTP context). Replaces the silent black viewfinder. */}
+            <AnimatePresence>
+              {startError && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center px-6 text-center"
+                  style={{ background: 'rgba(185,28,28,0.94)' }}
+                  role="alert"
+                >
+                  <AlertTriangle size={36} style={{ color: '#fff' }} />
+                  <p className="mt-3 text-white font-semibold text-sm">
+                    {startError === 'permission' ? (t('cameraPermissionDenied') || 'Camera access denied')
+                      : startError === 'no-camera' ? (t('noCameraFound') || 'No camera found on this device')
+                      : startError === 'insecure' ? (t('cameraNeedsHttps') || 'Camera requires a secure (HTTPS) page')
+                      : (t('cameraUnavailable') || 'Camera unavailable')}
+                  </p>
+                  <p className="mt-2 text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                    {startError === 'permission'
+                      ? (t('cameraPermissionHint') || 'Check your browser site settings and allow camera access.')
+                      : ''}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Success overlay — covers the viewfinder the instant a scan succeeds
                 so the user sees a green check instead of the black frame that
@@ -194,8 +260,8 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
             </AnimatePresence>
           </div>
 
-          {/* Scanning status */}
-          <div className="mt-8 flex items-center gap-2">
+          {/* Scanning status — aria-live so a screen reader announces the scan result */}
+          <div className="mt-8 flex items-center gap-2" aria-live="polite" aria-atomic="true">
             <div
               className="w-2 h-2 rounded-full"
               style={{
