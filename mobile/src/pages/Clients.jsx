@@ -20,20 +20,20 @@ function BalanceBadge({ balance }) {
   if (b < 0) {
     return (
       <span className="text-xs font-bold" style={{ color: '#f87171' }}>
-        {t('owes') || 'Owes'} {formatCurrency(Math.abs(b))}
+        {t('owes')} {formatCurrency(Math.abs(b))}
       </span>
     );
   }
   if (b > 0) {
     return (
       <span className="text-xs font-bold" style={{ color: '#34d399' }}>
-        +{formatCurrency(b)} {t('creditBalance') || 'credit'}
+        +{formatCurrency(b)} {t('creditBalance')}
       </span>
     );
   }
   return (
     <span className="text-xs" style={{ color: '#6b7280' }}>
-      {t('clear') || 'Clear'}
+      {t('clear')}
     </span>
   );
 }
@@ -81,9 +81,9 @@ export default function Clients() {
       <div className="flex-shrink-0 px-5 pt-4 pb-3">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-2xl font-bold text-white">{t('clients') || 'Clients'}</h1>
+            <h1 className="text-2xl font-bold text-white">{t('clients')}</h1>
             <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
-              {clients.length} {t('total') || 'total'}
+              {clients.length} {t('total')}
             </p>
           </div>
           <button
@@ -112,7 +112,7 @@ export default function Clients() {
             }}
           >
             <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#f87171' }}>
-              {t('owes') || 'Owed'}
+              {t('owes')}
             </p>
             <p className="text-base font-bold mt-0.5" style={{ color: '#f87171' }}>
               {formatCurrency(totalOwed)}
@@ -126,7 +126,7 @@ export default function Clients() {
             }}
           >
             <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#34d399' }}>
-              {t('creditBalance') || 'Credit'}
+              {t('creditBalance')}
             </p>
             <p className="text-base font-bold mt-0.5" style={{ color: '#34d399' }}>
               {formatCurrency(totalCredit)}
@@ -145,7 +145,7 @@ export default function Clients() {
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder={t('searchClients') || 'Search clients...'}
+            placeholder={t('searchClients')}
             className="w-full pl-10 pr-9 py-2.5 rounded-xl text-white placeholder-gray-600 outline-none"
             style={{
               background: 'rgba(255,255,255,0.04)',
@@ -167,9 +167,9 @@ export default function Clients() {
         {/* Filter pills */}
         <div className="flex gap-2">
           {[
-            { id: 'all',    label: t('all') || 'All' },
-            { id: 'owes',   label: t('owes') || 'Owes' },
-            { id: 'credit', label: t('creditBalance') || 'Credit' },
+            { id: 'all',    label: t('all') },
+            { id: 'owes',   label: t('owes') },
+            { id: 'credit', label: t('creditBalance') },
           ].map(({ id, label }) => (
             <button
               key={id}
@@ -191,13 +191,13 @@ export default function Clients() {
       <div className="flex-1 overflow-y-auto scroll-touch px-5 pb-4">
         {loading ? (
           <div className="text-center py-12" style={{ color: '#6b7280' }}>
-            {t('loading') || 'Loading...'}
+            {t('loading')}
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-12">
             <Users size={48} className="mx-auto mb-3" style={{ color: '#2a3a52' }} />
             <p style={{ color: '#6b7280' }}>
-              {query ? (t('noClientsMatch') || 'No clients match') : (t('noClientsFound') || 'No clients yet')}
+              {query ? t('noClientsMatch') : t('noClientsFound')}
             </p>
           </div>
         ) : (
@@ -289,7 +289,7 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
   useEffect(() => { reload(); }, [reload]);
 
   const onDeletePayment = async (p) => {
-    if (!window.confirm(t('confirmDeletePayment') || 'Delete this payment? This reverses its effect.')) return;
+    if (!window.confirm(t('confirmDeletePayment'))) return;
     try {
       await api.delete(`/api/payments/${p.id}`);
       await reload();
@@ -355,8 +355,8 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
           >
             {[
-              { id: 'overview', label: t('overview') || 'Overview' },
-              { id: 'history',  label: t('paymentHistory') || 'History' },
+              { id: 'overview', label: t('overview') },
+              { id: 'history',  label: t('paymentHistory') },
             ].map(({ id, label }) => (
               <button
                 key={id}
@@ -377,7 +377,7 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto scroll-touch px-5 pb-3">
           {loading ? (
-            <div className="text-center py-8" style={{ color: '#6b7280' }}>{t('loading') || 'Loading...'}</div>
+            <div className="text-center py-8" style={{ color: '#6b7280' }}>{t('loading')}</div>
           ) : tab === 'overview' ? (
             <OverviewTab client={client} />
           ) : (
@@ -408,7 +408,7 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
             }}
           >
             <Wallet size={18} />
-            {t('recordPayment') || 'Record Payment'}
+            {t('recordPayment')}
           </button>
         </div>
       </motion.div>
@@ -462,7 +462,7 @@ function OverviewTab({ client }) {
       >
         <p className="text-xs font-semibold uppercase tracking-wide mb-1"
           style={{ color: b < 0 ? '#f87171' : b > 0 ? '#34d399' : '#6b7280' }}>
-          {b < 0 ? (t('owes') || 'Owes') : b > 0 ? (t('creditBalance') || 'Credit') : (t('balance') || 'Balance')}
+          {b < 0 ? t('owes') : b > 0 ? t('creditBalance') : t('balance')}
         </p>
         <p className="text-2xl font-bold"
           style={{ color: b < 0 ? '#f87171' : b > 0 ? '#34d399' : '#e5e7eb' }}>
@@ -474,7 +474,7 @@ function OverviewTab({ client }) {
       {client.unpaid_sales && client.unpaid_sales.length > 0 ? (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#6b7280' }}>
-            {t('unpaidSales') || 'Unpaid Sales'} ({client.unpaid_sales.length})
+            {t('unpaidSales')} ({client.unpaid_sales.length})
           </p>
           <div className="space-y-2">
             {client.unpaid_sales.map(s => (
@@ -495,7 +495,7 @@ function OverviewTab({ client }) {
                     {formatCurrency(s.paid_amount)} / {formatCurrency(s.total)}
                   </p>
                   <p className="text-sm font-bold" style={{ color: '#f59e0b' }}>
-                    {formatCurrency(s.remaining)} {t('remaining') || 'left'}
+                    {formatCurrency(s.remaining)} {t('remaining')}
                   </p>
                 </div>
               </div>
@@ -504,18 +504,18 @@ function OverviewTab({ client }) {
         </div>
       ) : (
         <p className="text-xs text-center py-4" style={{ color: '#6b7280' }}>
-          {t('noUnpaidSales') || 'No unpaid sales'}
+          {t('noUnpaidSales')}
         </p>
       )}
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <p className="text-[10px] uppercase tracking-wide" style={{ color: '#6b7280' }}>{t('totalSales') || 'Sales'}</p>
+          <p className="text-[10px] uppercase tracking-wide" style={{ color: '#6b7280' }}>{t('totalSales')}</p>
           <p className="text-sm font-bold text-white mt-0.5">{client.sale_count || 0}</p>
         </div>
         <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <p className="text-[10px] uppercase tracking-wide" style={{ color: '#6b7280' }}>{t('totalPurchases') || 'Purchased'}</p>
+          <p className="text-[10px] uppercase tracking-wide" style={{ color: '#6b7280' }}>{t('totalPurchases')}</p>
           <p className="text-sm font-bold text-white mt-0.5">{formatCurrency(client.total_purchases || 0)}</p>
         </div>
       </div>
@@ -528,7 +528,7 @@ function HistoryTab({ payments, onDelete, onEdit, isAdmin }) {
     return (
       <div className="text-center py-8">
         <History size={40} className="mx-auto mb-3" style={{ color: '#2a3a52' }} />
-        <p style={{ color: '#6b7280' }}>{t('noPaymentsYet') || 'No payments yet'}</p>
+        <p style={{ color: '#6b7280' }}>{t('noPaymentsYet')}</p>
       </div>
     );
   }
@@ -544,14 +544,14 @@ function HistoryTab({ payments, onDelete, onEdit, isAdmin }) {
         const isReadOnly   = !!p.synthetic;
         const needsAdmin   = isAdjustment && !isAdmin;
         const label = isAdjustment
-          ? (p.amount >= 0 ? (t('creditAdjustment') || 'Credit adj.') : (t('debitAdjustment') || 'Debit adj.'))
+          ? (p.amount >= 0 ? t('creditAdjustment') : t('debitAdjustment'))
           : isCredit
-            ? (t('onAccountCredit') || 'On-account credit')
+            ? t('onAccountCredit')
             : isReturn
-              ? (t('returnCredit') || 'Return')
+              ? t('returnCredit')
               : p.sale_id
-                ? `${t('paymentForSale') || 'Payment'} #${p.sale_id}`
-                : (t('clientPayment') || 'Payment');
+                ? `${t('paymentForSale')} #${p.sale_id}`
+                : t('clientPayment');
 
         return (
           <div
@@ -602,7 +602,7 @@ function HistoryTab({ payments, onDelete, onEdit, isAdmin }) {
                     color: needsAdmin ? '#2a3a52' : '#9ca3af',
                     opacity: needsAdmin ? 0.4 : 1,
                   }}
-                  title={needsAdmin ? (t('adminOnly') || 'Admin only') : (t('edit') || 'Edit')}
+                  title={needsAdmin ? t('adminOnly') : t('edit')}
                 >
                   <Edit2 size={13} />
                 </button>
@@ -615,7 +615,7 @@ function HistoryTab({ payments, onDelete, onEdit, isAdmin }) {
                     color: needsAdmin ? '#4a2a3a' : '#f87171',
                     opacity: needsAdmin ? 0.4 : 1,
                   }}
-                  title={needsAdmin ? (t('adminOnly') || 'Admin only') : (t('delete') || 'Delete')}
+                  title={needsAdmin ? t('adminOnly') : t('delete')}
                 >
                   <Trash2 size={13} />
                 </button>
@@ -698,7 +698,7 @@ function VersementModal({ client, onClose, onDone }) {
         </div>
 
         <div className="flex items-center justify-between px-5 py-3">
-          <h2 className="text-lg font-bold text-white">{t('recordPayment') || 'Record Payment'}</h2>
+          <h2 className="text-lg font-bold text-white">{t('recordPayment')}</h2>
           <button
             onClick={onClose}
             disabled={submitting}
@@ -719,7 +719,7 @@ function VersementModal({ client, onClose, onDone }) {
             }}
           >
             <p className="text-xs" style={{ color: '#6b7280' }}>
-              {client.name} {debt > 0 ? (t('owes') || 'owes') : (t('hasNoDebt') || 'has no debt')}
+              {client.name} {debt > 0 ? t('owes') : t('hasNoDebt')}
             </p>
             <p className="text-xl font-bold" style={{ color: debt > 0 ? '#f87171' : '#34d399' }}>
               {formatCurrency(debt)}
@@ -735,7 +735,7 @@ function VersementModal({ client, onClose, onDone }) {
             }}
           >
             <p className="text-xs font-medium" style={{ color: '#4a5568' }}>
-              {t('amountReceived') || 'Amount Received'}
+              {t('amountReceived')}
             </p>
             <p className="text-3xl font-bold text-white mt-1">
               {amount ? formatCurrency(numeric) : <span style={{ color: '#2a3a52' }}>0.00 DA</span>}
@@ -756,7 +756,7 @@ function VersementModal({ client, onClose, onDone }) {
                     color: '#D4A574',
                   }}
                 >
-                  {pct === 100 ? (t('fullDebt') || 'Full') : `${pct}%`}
+                  {pct === 100 ? t('fullDebt') : `${pct}%`}
                 </button>
               ))}
             </div>
@@ -796,7 +796,7 @@ function VersementModal({ client, onClose, onDone }) {
                   border:     method === m ? '1px solid rgba(212,165,116,0.25)' : '1px solid transparent',
                 }}
               >
-                {t(m) || (m === 'cash' ? 'Cash' : 'Bank')}
+                {t(m)}
               </button>
             ))}
           </div>
@@ -806,7 +806,7 @@ function VersementModal({ client, onClose, onDone }) {
             type="text"
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder={t('notesOptional') || 'Notes (optional)'}
+            placeholder={t('notesOptional')}
             className="w-full px-4 py-2.5 rounded-xl text-white placeholder-gray-600 outline-none"
             style={{
               background: 'rgba(255,255,255,0.04)',
@@ -827,12 +827,12 @@ function VersementModal({ client, onClose, onDone }) {
             >
               {appliedToDebt > 0 && (
                 <p>
-                  ✓ {formatCurrency(appliedToDebt)} {t('appliedToDebt') || 'applied to debt'}
+                  ✓ {formatCurrency(appliedToDebt)} {t('appliedToDebt')}
                 </p>
               )}
               {projectedCredit > 0 && (
                 <p>
-                  ✓ {formatCurrency(projectedCredit)} {t('keptAsCredit') || 'kept as credit for future'}
+                  ✓ {formatCurrency(projectedCredit)} {t('keptAsCredit')}
                 </p>
               )}
             </div>
@@ -863,7 +863,7 @@ function VersementModal({ client, onClose, onDone }) {
             }}
           >
             <Wallet size={18} />
-            {submitting ? (t('processing') || 'Processing...') : (t('recordPayment') || 'Record Payment')}
+            {submitting ? t('processing') : t('recordPayment')}
           </button>
         </div>
       </motion.div>
@@ -884,7 +884,7 @@ function EditEntryModal({ entry, onClose, onDone }) {
   const submit = async () => {
     const amt = parseFloat((amount || '').replace(',', '.'));
     if (!Number.isFinite(amt) || amt === 0) {
-      setError(t('amountMustBeNonZero') || 'Amount must be non-zero');
+      setError(t('amountMustBeNonZero'));
       return;
     }
     setSubmitting(true);
@@ -921,7 +921,7 @@ function EditEntryModal({ entry, onClose, onDone }) {
         exit={{ scale: 0.95, opacity: 0 }}
       >
         <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-          <h2 className="text-base font-bold text-white">{t('editPayment') || 'Edit payment'}</h2>
+          <h2 className="text-base font-bold text-white">{t('editPayment')}</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full"
             style={{ background: 'rgba(255,255,255,0.06)' }}>
             <X size={16} style={{ color: '#9ca3af' }} />
@@ -931,7 +931,7 @@ function EditEntryModal({ entry, onClose, onDone }) {
         <div className="p-5 space-y-3">
           <div>
             <label className="text-xs font-semibold" style={{ color: '#6b7280' }}>
-              {t('amount') || 'Amount'} (DZD)
+              {t('amount')} (DZD)
             </label>
             <input
               type="text"
@@ -948,7 +948,7 @@ function EditEntryModal({ entry, onClose, onDone }) {
           </div>
           <div>
             <label className="text-xs font-semibold" style={{ color: '#6b7280' }}>
-              {t('notes') || 'Notes'}
+              {t('notes')}
             </label>
             <input
               type="text"
@@ -977,7 +977,7 @@ function EditEntryModal({ entry, onClose, onDone }) {
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
             style={{ background: 'rgba(255,255,255,0.04)', color: '#9ca3af' }}
           >
-            {t('cancel') || 'Cancel'}
+            {t('cancel')}
           </button>
           <button
             onClick={submit}
@@ -988,7 +988,7 @@ function EditEntryModal({ entry, onClose, onDone }) {
               opacity: submitting ? 0.6 : 1,
             }}
           >
-            {submitting ? '...' : (t('save') || 'Save')}
+            {submitting ? '...' : t('save')}
           </button>
         </div>
       </motion.div>

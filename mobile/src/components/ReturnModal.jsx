@@ -209,7 +209,7 @@ export default function ReturnModal({ sale, onConfirm, onClose }) {
                             {item.product_name || item.name || t('products')}
                           </p>
                           <p className="text-xs mt-0.5" style={{ color: '#4a5568' }}>
-                            {formatCurrency(item.unit_price || 0)} × {maxQty} sold
+                            {formatCurrency(item.unit_price || 0)} × {maxQty} {t('sold')}
                           </p>
                         </div>
 
@@ -233,7 +233,7 @@ export default function ReturnModal({ sale, onConfirm, onClose }) {
                           >
                             <div className="flex items-center gap-3 mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                               <p className="text-xs flex-1" style={{ color: '#6b7280' }}>
-                                Return qty (max {maxQty}):
+                                {t('returnQtyMax').replace('{n}', maxQty)}
                               </p>
                               <div className="flex items-center gap-2">
                                 <button

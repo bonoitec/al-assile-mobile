@@ -143,7 +143,7 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
               background: 'rgba(255,255,255,0.1)',
               border: '1px solid rgba(255,255,255,0.12)',
             }}
-            aria-label={t('closeScanner') || 'Close scanner'}
+            aria-label={t('closeScanner')}
           >
             <X size={20} style={{ color: '#fff' }} />
           </button>
@@ -217,14 +217,14 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
                 >
                   <AlertTriangle size={36} style={{ color: '#fff' }} />
                   <p className="mt-3 text-white font-semibold text-sm">
-                    {startError === 'permission' ? (t('cameraPermissionDenied') || 'Camera access denied')
-                      : startError === 'no-camera' ? (t('noCameraFound') || 'No camera found on this device')
-                      : startError === 'insecure' ? (t('cameraNeedsHttps') || 'Camera requires a secure (HTTPS) page')
-                      : (t('cameraUnavailable') || 'Camera unavailable')}
+                    {startError === 'permission' ? t('cameraPermissionDenied')
+                      : startError === 'no-camera' ? t('noCameraFound')
+                      : startError === 'insecure' ? t('cameraNeedsHttps')
+                      : t('cameraUnavailable')}
                   </p>
                   <p className="mt-2 text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>
                     {startError === 'permission'
-                      ? (t('cameraPermissionHint') || 'Check your browser site settings and allow camera access.')
+                      ? t('cameraPermissionHint')
                       : ''}
                   </p>
                 </motion.div>
@@ -270,7 +270,7 @@ export default function BarcodeScanner({ isOpen, onScan, onClose }) {
               }}
             />
             <p className="text-sm font-medium" style={{ color: scanned ? '#10b981' : '#8B7355' }}>
-              {scanned ? (t('scanned') || 'Scanned!') : t('scanning')}
+              {scanned ? t('scanned') : t('scanning')}
             </p>
           </div>
 

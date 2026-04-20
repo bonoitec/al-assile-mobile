@@ -70,24 +70,24 @@ export default function PaymentModal({ total, hasClient, clientName, onConfirm, 
     if (isCredit) {
       return {
         tone: 'amber',
-        text: `${t('nothingNow') || 'Nothing paid now'} — ${formatCurrency(total)} ${t('willBeDebt') || 'added to their debt'}`,
+        text: `${t('nothingNow')} — ${formatCurrency(total)} ${t('willBeDebt')}`,
       };
     }
     if (numericPaid === 0) return null;
     if (numericPaid < total) {
       const owed = roundMoney(total - numericPaid);
-      const who = clientName || (t('client') || 'Client');
+      const who = clientName || t('client');
       return {
         tone: 'amber',
-        text: `${who} ${t('willStillOwe') || 'will still owe'} ${formatCurrency(owed)}`,
+        text: `${who} ${t('willStillOwe')} ${formatCurrency(owed)}`,
       };
     }
-    if (numericPaid === total) return { tone: 'green', text: t('fullyPaid') || 'Fully paid ✓' };
+    if (numericPaid === total) return { tone: 'green', text: t('fullyPaid') };
     // Overpayment
     const extra = roundMoney(numericPaid - total);
     return overpayDisposition === 'change'
-      ? { tone: 'blue',  text: `${t('fullyPaid') || 'Fully paid'} — ${formatCurrency(extra)} ${t('giveChange') || 'give change'}` }
-      : { tone: 'green', text: `${t('fullyPaid') || 'Fully paid'} — ${formatCurrency(extra)} ${t('keptAsCredit') || 'kept as credit'}` };
+      ? { tone: 'blue',  text: `${t('fullyPaid')} — ${formatCurrency(extra)} ${t('giveChange')}` }
+      : { tone: 'green', text: `${t('fullyPaid')} — ${formatCurrency(extra)} ${t('keptAsCredit')}` };
   })();
 
   return (
@@ -175,16 +175,37 @@ export default function PaymentModal({ total, hasClient, clientName, onConfirm, 
 
           {!isCredit && (
             <>
-              {/* Amount display */}
+              {/* Amount input — tap to type directly (phone keyboard), or use the keypad below */}
               <div className="px-5 pb-3">
                 <div
-                  className="rounded-xl px-4 py-3 text-right"
+                  className="rounded-xl px-4 py-3"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
-                  <p className="text-xs font-medium mb-1" style={{ color: '#4a5568' }}>{t('amountPaid')}</p>
-                  <p className="text-2xl font-bold text-white">
-                    {amountPaid ? formatCurrency(numericPaid) : <span style={{ color: '#2a3a52' }}>0.00 DA</span>}
-                  </p>
+                  <label htmlFor="mobile-payment-amount" className="block text-xs font-medium mb-1 text-right" style={{ color: '#4a5568' }}>
+                    {t('amountPaid')}
+                  </label>
+                  <div className="flex items-baseline justify-end gap-2">
+                    <input
+                      id="mobile-payment-amount"
+                      type="text"
+                      inputMode="decimal"
+                      // Allow digits, optional single decimal separator (dot or comma)
+                      pattern="[0-9]*[.,]?[0-9]*"
+                      value={amountPaid}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        // Strip anything that isn't a digit or separator; keep at most one separator
+                        const cleaned = v.replace(/[^0-9.,]/g, '').replace(/([.,])(?=.*[.,])/g, '');
+                        setAmountPaid(cleaned);
+                      }}
+                      placeholder="0"
+                      autoComplete="off"
+                      className="flex-1 bg-transparent outline-none text-right text-2xl font-bold text-white"
+                      // 16px minimum so iOS doesn't auto-zoom on focus
+                      style={{ fontSize: '24px', minWidth: 0 }}
+                    />
+                    <span className="text-lg font-semibold" style={{ color: '#4a5568' }}>DA</span>
+                  </div>
                 </div>
 
                 {/* Percentage quick buttons — for "pay half", "quarter", etc. */}
@@ -285,7 +306,7 @@ export default function PaymentModal({ total, hasClient, clientName, onConfirm, 
                     style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.18)' }}
                   >
                     <p className="text-xs font-semibold mb-1" style={{ color: '#60a5fa' }}>
-                      {t('overpayChooseChange') || 'Customer gave more than the total. What to do with the extra?'}
+                      {t('overpayChooseChange')}
                     </p>
                     <p className="text-sm font-bold mb-3" style={{ color: '#60a5fa' }}>
                       +{formatCurrency(change)}
@@ -301,7 +322,7 @@ export default function PaymentModal({ total, hasClient, clientName, onConfirm, 
                         }}
                       >
                         <ArrowDownCircle size={14} />
-                        {t('giveChange') || 'Give change'}
+                        {t('giveChange')}
                       </button>
                       <button
                         onClick={() => setOverpayDisposition('credit')}
@@ -315,12 +336,12 @@ export default function PaymentModal({ total, hasClient, clientName, onConfirm, 
                         }}
                       >
                         <Gift size={14} />
-                        {t('keepAsCredit') || 'Keep as credit'}
+                        {t('keepAsCredit')}
                       </button>
                     </div>
                     {!hasClient && overpayDisposition === 'credit' && (
                       <p className="text-[11px] mt-2" style={{ color: '#f87171' }}>
-                        {t('clientRequired') || 'Client required'} — {t('clientRequiredDesc') || 'select a client to keep credit'}
+                        {t('clientRequired')} — {t('clientRequiredDesc')}
                       </p>
                     )}
                   </div>

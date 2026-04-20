@@ -135,7 +135,7 @@ export default function Products() {
     // Out-of-stock guard: addItem would otherwise store a quantity-0 cart line
     // because Math.min(1, 0) = 0, leaving a ghost entry the cashier has to delete.
     if ((found.quantity ?? 0) <= 0) {
-      showScanFeedback('error', `${found.name}: ${t('outOfStock') || 'out of stock'}`);
+      showScanFeedback('error', `${found.name}: ${t('outOfStock')}`);
       return;
     }
 

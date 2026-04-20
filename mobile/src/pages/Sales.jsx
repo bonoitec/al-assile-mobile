@@ -487,7 +487,7 @@ export default function Sales() {
               className="px-5 py-2.5 rounded-xl text-sm font-semibold touch-manipulation"
               style={{ background: 'rgba(212,165,116,0.1)', border: '1px solid rgba(212,165,116,0.2)', color: '#D4A574' }}
             >
-              Try Again
+              {t('tryAgain')}
             </button>
           </div>
         ) : sales.length === 0 ? (
@@ -518,7 +518,7 @@ export default function Sales() {
             <div>
               <p className="text-base font-bold text-white mb-1">{t('noResults')}</p>
               <p className="text-sm" style={{ color: '#3d5068' }}>
-                No sales match "{searchQuery}"
+                {t('noSalesMatch')} "{searchQuery}"
               </p>
             </div>
           </div>

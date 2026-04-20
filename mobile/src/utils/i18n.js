@@ -209,6 +209,19 @@ const translations = {
     giveChange: 'Give change',
     keepAsCredit: 'Keep as credit',
 
+    // Returns
+    sold: 'sold',
+    returnQtyMax: 'Return qty (max {n}):',
+
+    // Barcode scanner
+    closeScanner: 'Close scanner',
+    cameraPermissionDenied: 'Camera access denied',
+    noCameraFound: 'No camera found on this device',
+    cameraNeedsHttps: 'Camera requires a secure (HTTPS) page',
+    cameraUnavailable: 'Camera unavailable',
+    cameraPermissionHint: 'Check your browser site settings and allow camera access.',
+    scanned: 'Scanned!',
+
     // Copyright
     copyright: 'Al Assile Mobile Sales',
   },
@@ -419,6 +432,19 @@ const translations = {
     overpayChooseChange: 'العميل دفع أكثر من المبلغ الإجمالي. ماذا تفعل بالباقي؟',
     giveChange: 'أعد الباقي',
     keepAsCredit: 'احفظه كرصيد',
+
+    // Returns
+    sold: 'مباع',
+    returnQtyMax: 'كمية الإرجاع (بحد أقصى {n}):',
+
+    // Barcode scanner
+    closeScanner: 'إغلاق الماسح',
+    cameraPermissionDenied: 'تم رفض الوصول إلى الكاميرا',
+    noCameraFound: 'لا توجد كاميرا على هذا الجهاز',
+    cameraNeedsHttps: 'الكاميرا تتطلب صفحة آمنة (HTTPS)',
+    cameraUnavailable: 'الكاميرا غير متاحة',
+    cameraPermissionHint: 'تحقق من إعدادات موقع المتصفح واسمح بالوصول إلى الكاميرا.',
+    scanned: 'تم المسح!',
 
     // Copyright
     copyright: 'الأصيل - المبيعات المتنقلة',
