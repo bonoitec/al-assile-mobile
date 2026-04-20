@@ -373,11 +373,21 @@ router.get('/status', (req, res) => {
       SELECT created_at FROM sales ORDER BY created_at DESC LIMIT 1
     `).get();
 
+    // Marker to detect which sync-code version is deployed. Bump when pull
+    // semantics change so we can verify a deploy went live via /api/sync/status.
+    const SYNC_PULL_VERSION = 'since-watermark-v2';
+
+    // Also report total (synced + unsynced) sync_log entries so we can see at
+    // a glance whether entries exist but are stuck behind synced=1.
+    const totalLog = db.prepare(`SELECT COUNT(*) AS c FROM sync_log WHERE entity_type='sale'`).get();
+
     return res.json({
       success:          true,
       pending_sales:    pendingCount.count,
+      total_sale_logs:  totalLog.c,
       last_sale_at:     lastSale ? lastSale.created_at : null,
-      server_time:      new Date().toISOString()
+      server_time:      new Date().toISOString(),
+      sync_pull_version: SYNC_PULL_VERSION
     });
   } catch (err) {
     console.error('[sync] GET /status error:', err.message);
