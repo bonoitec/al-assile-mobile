@@ -238,9 +238,19 @@ router.get('/pull', (req, res) => {
 
   const pull = db.transaction(() => {
     // ------------------------- SALES -------------------------
+    // The desktop's `since` watermark is the trusted marker of what it has
+    // already received. We do NOT filter by `synced = 0` — that would turn
+    // a crashed/dropped pull into permanent data loss (the server would mark
+    // the row synced even if the desktop never persisted it). The desktop
+    // uses `sales.remote_id` for idempotency, so replaying is safe.
+    //
+    // datetime() normalizes both sides — sync_log.created_at is SQLite's
+    // "YYYY-MM-DD HH:MM:SS" (space separator) while `since` comes in as
+    // ISO 8601 with T/Z. Raw string comparison mis-sorts them because
+    // ' ' (0x20) < 'T' (0x54), so newer rows look older.
     const saleQueryBase = since
       ? `SELECT DISTINCT entity_id AS sale_id FROM sync_log
-         WHERE entity_type = 'sale' AND synced = 0 AND created_at > ?`
+         WHERE entity_type = 'sale' AND datetime(created_at) > datetime(?)`
       : `SELECT DISTINCT entity_id AS sale_id FROM sync_log
          WHERE entity_type = 'sale' AND synced = 0`;
     const saleRows = since ? db.prepare(saleQueryBase).all(since) : db.prepare(saleQueryBase).all();
@@ -280,9 +290,12 @@ router.get('/pull', (req, res) => {
     //   delete → return a tombstone { id, __action: 'delete' } — the row is gone
     // We collapse multiple entries per id to the LATEST action so the desktop
     // only has to apply one operation per payment.
+    // Same reasoning as sales: `since` watermark is authoritative, no synced
+    // filter. Desktop dedupes via client_payments.remote_id (for 'create') and
+    // applies update/delete branches idempotently.
     const payLogRows = since
       ? db.prepare(`SELECT entity_id AS payment_id, action, id AS log_id FROM sync_log
-                    WHERE entity_type = 'payment' AND synced = 0 AND created_at > ?
+                    WHERE entity_type = 'payment' AND datetime(created_at) > datetime(?)
                     ORDER BY id ASC`).all(since)
       : db.prepare(`SELECT entity_id AS payment_id, action, id AS log_id FROM sync_log
                     WHERE entity_type = 'payment' AND synced = 0
