@@ -170,6 +170,35 @@ const initDatabase = (db) => {
     ON sales (date)
   `);
 
+  // ============================================
+  // CLIENT PAYMENTS — mobile ledger
+  // Mirrors the desktop ledger so mobile-recorded versements and per-sale
+  // payments flow back during sync pull. Each row = one money movement.
+  //   sale_id = X  → paid against a specific sale
+  //   sale_id = NULL → on-account credit or adjustment
+  //   batch_id groups rows from one versement for display/undo
+  // ============================================
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS client_payments (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id  INTEGER NOT NULL,
+      sale_id    INTEGER,
+      amount     REAL    NOT NULL,
+      date       DATE    NOT NULL,
+      method     TEXT    NOT NULL DEFAULT 'cash',
+      notes      TEXT,
+      batch_id   TEXT,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id)  REFERENCES clients(id) ON DELETE CASCADE,
+      FOREIGN KEY (sale_id)    REFERENCES sales(id)   ON DELETE SET NULL,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_cp_client ON client_payments(client_id);');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_cp_sale   ON client_payments(sale_id);');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_cp_batch  ON client_payments(batch_id);');
+
   // Migration: add 'return' to sales status CHECK constraint
   try {
     const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='sales'").get();

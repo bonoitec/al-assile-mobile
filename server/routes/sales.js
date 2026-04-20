@@ -89,8 +89,10 @@ router.post('/', (req, res) => {
       return sum + (item.quantity * item.unit_price);
     }, 0);
     const total = Math.max(0, subtotal - discount);
-    const effectivePaid = Math.min(paid_amount, total);
-    const status = deriveStatus(total, effectivePaid);
+    // Don't cap — an overpayment is legitimate when the cashier chose
+    // "keep as credit" on the client side. Overpay branch handles the excess.
+    const effectivePaid = paid_amount;
+    const status = effectivePaid >= total ? 'paid' : effectivePaid > 0 ? 'partial' : 'pending';
 
     // 2. Insert sale header
     const saleResult = db.prepare(`
@@ -137,18 +139,31 @@ router.post('/', (req, res) => {
       deductQty.run(item.quantity, item.product_id);
     }
 
-    // 4. Update client balance when there is an outstanding amount.
-    //    The desktop uses balance as a running debt tracker (negative = owes money).
-    //    We mirror that convention: subtract the unpaid portion from the client balance.
-    if (client_id && total > effectivePaid) {
-      const debt = total - effectivePaid;
-      db.prepare(`
-        UPDATE clients SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(debt, client_id);
+    // 4. Update client balance. Three cases, matching desktop addSale semantics:
+    //    - partial/credit (effectivePaid < total): balance -= (total - paid)  → client owes more
+    //    - exact cash (effectivePaid === total): no balance change
+    //    - overpayment (effectivePaid > total): balance += (paid - total) → client has store credit
+    //    The negative-balance convention (owes = negative) matches the desktop.
+    if (client_id) {
+      if (total > effectivePaid) {
+        const debt = total - effectivePaid;
+        db.prepare(`UPDATE clients SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(debt, client_id);
+      } else if (effectivePaid > total) {
+        const credit = effectivePaid - total;
+        db.prepare(`UPDATE clients SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(credit, client_id);
+      }
     }
 
-    // 5. Log the sale to sync_log so the desktop pull can find it
+    // 5. Intentionally NO client_payments row for the sale's initial cash portion.
+    //    Reasons:
+    //    - Pushing it to sync would double-count on desktop (which already derives
+    //      a ledger row from addSale when importing the sale).
+    //    - Writing locally without syncing causes divergence: if the cashier edits
+    //      the row on mobile, the change is invisible to desktop.
+    //    The mobile history endpoint synthesizes sale-payments read-only from
+    //    sales.paid_amount so the UI still shows the full timeline.
+
+    // 6. Log the sale to sync_log so the desktop pull can find it
     db.prepare(`
       INSERT INTO sync_log (entity_type, entity_id, action, synced)
       VALUES ('sale', ?, 'create', 0)

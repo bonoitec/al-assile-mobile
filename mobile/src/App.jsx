@@ -6,6 +6,7 @@ import Login from './pages/Login.jsx';
 import Products from './pages/Products.jsx';
 import Cart from './pages/Cart.jsx';
 import Sales from './pages/Sales.jsx';
+import Clients from './pages/Clients.jsx';
 import BottomNav from './components/BottomNav.jsx';
 
 function ProtectedRoute({ children }) {
@@ -50,6 +51,14 @@ function AppLayout() {
             element={
               <ProtectedRoute>
                 <Sales />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clients"
+            element={
+              <ProtectedRoute>
+                <Clients />
               </ProtectedRoute>
             }
           />

@@ -1,27 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CreditCard, Banknote, CheckCircle2, ChevronRight, AlertTriangle } from 'lucide-react';
+import { X, CreditCard, Banknote, CheckCircle2, ChevronRight, AlertTriangle, Gift, ArrowDownCircle } from 'lucide-react';
 import { formatCurrency } from '../utils/currency.js';
 import { t } from '../utils/i18n.js';
 
-export default function PaymentModal({ total, hasClient, onConfirm, onClose }) {
+const roundMoney = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+export default function PaymentModal({ total, hasClient, clientName, onConfirm, onClose }) {
   const [amountPaid, setAmountPaid] = useState('');
   const [method, setMethod] = useState('cash'); // 'cash' | 'credit'
   const [notes, setNotes] = useState('');
+  // When the customer gives MORE than total, ask: change vs credit
+  const [overpayDisposition, setOverpayDisposition] = useState('change'); // 'change' | 'credit'
 
-  const numericPaid = parseFloat(amountPaid.replace(',', '.') || '0') || 0;
-  const change = numericPaid - total;
+  const numericPaid = roundMoney(parseFloat(amountPaid.replace(',', '.') || '0') || 0);
+  const change = roundMoney(numericPaid - total);
   const isCredit = method === 'credit';
-
-  const paymentStatus =
-    isCredit
-      ? 'credit'
-      : numericPaid >= total
-        ? numericPaid > total ? 'overpaid' : 'exact'
-        : 'partial';
-
+  const isOverpay = !isCredit && numericPaid > total && change > 0;
   const isPartial = !isCredit && numericPaid > 0 && numericPaid < total;
-  const needsClient = isCredit || isPartial;
+  const needsClient = isCredit || isPartial || (isOverpay && overpayDisposition === 'credit');
   const canComplete = (isCredit || numericPaid > 0) && (!needsClient || hasClient);
 
   const quickAmounts = [
@@ -44,14 +41,54 @@ export default function PaymentModal({ total, hasClient, onConfirm, onClose }) {
   };
 
   const handleComplete = () => {
+    // Cap paid at total when overpayment is "change" (server behavior matches).
+    // Pass the full amount when the cashier chose "credit" so the server can
+    // credit the client with the excess (via addSale's overpayment branch).
+    const effectivePaid = isCredit
+      ? 0
+      : isOverpay && overpayDisposition === 'change'
+        ? total
+        : numericPaid;
+    const status = isCredit
+      ? 'credit'
+      : effectivePaid >= total
+        ? 'paid'
+        : 'partial';
     onConfirm({
-      amount_paid: isCredit ? 0 : numericPaid,
+      amount_paid: effectivePaid,
       payment_method: method,
       notes: notes.trim(),
-      payment_status: paymentStatus === 'credit' ? 'credit'
-        : numericPaid >= total ? 'paid' : 'partial',
+      payment_status: status,
     });
   };
+
+  /**
+   * Plain-language one-liner: "Fully paid ✓" / "Will still owe 2500 DZD" / ...
+   * Appears above the Complete button so the cashier sees the consequence.
+   */
+  const summary = (() => {
+    if (isCredit) {
+      return {
+        tone: 'amber',
+        text: `${t('nothingNow') || 'Nothing paid now'} — ${formatCurrency(total)} ${t('willBeDebt') || 'added to their debt'}`,
+      };
+    }
+    if (numericPaid === 0) return null;
+    if (numericPaid < total) {
+      const owed = roundMoney(total - numericPaid);
+      const who = clientName || (t('client') || 'Client');
+      return {
+        tone: 'amber',
+        text: `${who} ${t('willStillOwe') || 'will still owe'} ${formatCurrency(owed)}`,
+      };
+    }
+    if (numericPaid === total) return { tone: 'green', text: t('fullyPaid') || 'Fully paid ✓' };
+    // Overpayment
+    const extra = roundMoney(numericPaid - total);
+    return overpayDisposition === 'change'
+      ? { tone: 'blue',  text: `${t('fullyPaid') || 'Fully paid'} — ${formatCurrency(extra)} ${t('giveChange') || 'give change'}` }
+      : { tone: 'green', text: `${t('fullyPaid') || 'Fully paid'} — ${formatCurrency(extra)} ${t('keptAsCredit') || 'kept as credit'}` };
+  })();
 
   return (
     <AnimatePresence>
@@ -150,20 +187,53 @@ export default function PaymentModal({ total, hasClient, onConfirm, onClose }) {
                   </p>
                 </div>
 
-                {/* Quick amounts */}
+                {/* Percentage quick buttons — for "pay half", "quarter", etc. */}
                 <div className="flex gap-2 mt-2">
-                  {quickAmounts.map((q, i) => (
+                  <button
+                    onClick={() => setAmountPaid(String(total))}
+                    className="flex-1 py-2 rounded-lg text-xs font-semibold touch-manipulation"
+                    style={{
+                      background: numericPaid === total ? 'rgba(212,165,116,0.15)' : 'rgba(255,255,255,0.04)',
+                      border:     numericPaid === total ? '1px solid rgba(212,165,116,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                      color:      numericPaid === total ? '#D4A574' : '#6b7280',
+                    }}
+                  >
+                    {t('exact')}
+                  </button>
+                  {[25, 50, 75].map(pct => {
+                    const val = roundMoney(total * pct / 100);
+                    const active = numericPaid === val;
+                    return (
+                      <button
+                        key={pct}
+                        onClick={() => setAmountPaid(String(val))}
+                        className="flex-1 py-2 rounded-lg text-xs font-semibold touch-manipulation"
+                        style={{
+                          background: active ? 'rgba(212,165,116,0.15)' : 'rgba(255,255,255,0.04)',
+                          border:     active ? '1px solid rgba(212,165,116,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                          color:      active ? '#D4A574' : '#6b7280',
+                        }}
+                      >
+                        {pct}%
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Round-up buttons — for "customer gave me 1000 DA round" */}
+                <div className="flex gap-2 mt-2">
+                  {quickAmounts.slice(1).map((q, i) => (
                     <button
                       key={i}
                       onClick={() => setAmountPaid(String(q.value))}
-                      className="flex-1 py-2 rounded-lg text-xs font-semibold touch-manipulation transition-colors"
+                      className="flex-1 py-2 rounded-lg text-xs font-semibold touch-manipulation"
                       style={{
                         background: numericPaid === q.value ? 'rgba(212,165,116,0.15)' : 'rgba(255,255,255,0.04)',
-                        border: numericPaid === q.value ? '1px solid rgba(212,165,116,0.3)' : '1px solid rgba(255,255,255,0.06)',
-                        color: numericPaid === q.value ? '#D4A574' : '#6b7280',
+                        border:     numericPaid === q.value ? '1px solid rgba(212,165,116,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                        color:      numericPaid === q.value ? '#D4A574' : '#6b7280',
                       }}
                     >
-                      {i === 0 ? t('exact') : formatCurrency(q.value)}
+                      {formatCurrency(q.value)}
                     </button>
                   ))}
                 </div>
@@ -188,13 +258,13 @@ export default function PaymentModal({ total, hasClient, onConfirm, onClose }) {
               </div>
 
               {/* Change / Due display */}
-              {numericPaid > 0 && (
+              {numericPaid > 0 && !isOverpay && (
                 <div className="px-5 pb-3">
                   <div
                     className="rounded-xl px-4 py-3 flex items-center justify-between"
                     style={{
                       background: change >= 0 ? 'rgba(16,185,129,0.07)' : 'rgba(245,158,11,0.07)',
-                      border: change >= 0 ? '1px solid rgba(16,185,129,0.15)' : '1px solid rgba(245,158,11,0.15)',
+                      border:     change >= 0 ? '1px solid rgba(16,185,129,0.15)' : '1px solid rgba(245,158,11,0.15)',
                     }}
                   >
                     <span className="text-sm font-medium" style={{ color: change >= 0 ? '#34d399' : '#f59e0b' }}>
@@ -203,6 +273,56 @@ export default function PaymentModal({ total, hasClient, onConfirm, onClose }) {
                     <span className="text-lg font-bold" style={{ color: change >= 0 ? '#34d399' : '#f59e0b' }}>
                       {formatCurrency(Math.abs(change))}
                     </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Overpayment choice — change vs credit */}
+              {isOverpay && (
+                <div className="px-5 pb-3">
+                  <div
+                    className="rounded-xl p-3"
+                    style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.18)' }}
+                  >
+                    <p className="text-xs font-semibold mb-1" style={{ color: '#60a5fa' }}>
+                      {t('overpayChooseChange') || 'Customer gave more than the total. What to do with the extra?'}
+                    </p>
+                    <p className="text-sm font-bold mb-3" style={{ color: '#60a5fa' }}>
+                      +{formatCurrency(change)}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setOverpayDisposition('change')}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-semibold touch-manipulation"
+                        style={{
+                          background: overpayDisposition === 'change' ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.04)',
+                          border:     overpayDisposition === 'change' ? '1px solid rgba(59,130,246,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                          color:      overpayDisposition === 'change' ? '#60a5fa' : '#6b7280',
+                        }}
+                      >
+                        <ArrowDownCircle size={14} />
+                        {t('giveChange') || 'Give change'}
+                      </button>
+                      <button
+                        onClick={() => setOverpayDisposition('credit')}
+                        disabled={!hasClient}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-semibold touch-manipulation"
+                        style={{
+                          background: overpayDisposition === 'credit' ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.04)',
+                          border:     overpayDisposition === 'credit' ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                          color:      overpayDisposition === 'credit' ? '#34d399' : '#6b7280',
+                          opacity: hasClient ? 1 : 0.4,
+                        }}
+                      >
+                        <Gift size={14} />
+                        {t('keepAsCredit') || 'Keep as credit'}
+                      </button>
+                    </div>
+                    {!hasClient && overpayDisposition === 'credit' && (
+                      <p className="text-[11px] mt-2" style={{ color: '#f87171' }}>
+                        {t('clientRequired') || 'Client required'} — {t('clientRequiredDesc') || 'select a client to keep credit'}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -277,6 +397,34 @@ export default function PaymentModal({ total, hasClient, onConfirm, onClose }) {
               }}
             />
           </div>
+
+          {/* Plain-language summary line — "Fatima will still owe 2500 DZD" */}
+          {summary && (
+            <div className="px-5 pb-2">
+              <div
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-center"
+                style={{
+                  background: summary.tone === 'green'
+                    ? 'rgba(16,185,129,0.10)'
+                    : summary.tone === 'amber'
+                      ? 'rgba(245,158,11,0.10)'
+                      : 'rgba(59,130,246,0.10)',
+                  border: summary.tone === 'green'
+                    ? '1px solid rgba(16,185,129,0.25)'
+                    : summary.tone === 'amber'
+                      ? '1px solid rgba(245,158,11,0.25)'
+                      : '1px solid rgba(59,130,246,0.25)',
+                  color: summary.tone === 'green'
+                    ? '#34d399'
+                    : summary.tone === 'amber'
+                      ? '#fbbf24'
+                      : '#60a5fa',
+                }}
+              >
+                {summary.text}
+              </div>
+            </div>
+          )}
 
           {/* Complete button */}
           <div className="px-5 pb-4">

@@ -438,6 +438,7 @@ export default function Cart() {
         <PaymentModal
           total={total}
           hasClient={!!client}
+          clientName={client?.name || null}
           onConfirm={handleCompleteSale}
           onClose={() => setShowPaymentModal(false)}
         />

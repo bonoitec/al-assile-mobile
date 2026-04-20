@@ -91,7 +91,18 @@ router.get('/:id', (req, res) => {
       return res.status(404).json({ success: false, error: 'Client not found' });
     }
 
-    return res.json({ success: true, data: client });
+    // Include unpaid sales so the mobile Clients detail screen can show them
+    // without a second round-trip.
+    const unpaid_sales = db.prepare(`
+      SELECT id, date, total, paid_amount, status, notes,
+             (total - paid_amount) AS remaining
+      FROM sales
+      WHERE client_id = ?
+        AND status NOT IN ('paid', 'cancelled', 'return')
+      ORDER BY date ASC, id ASC
+    `).all(id);
+
+    return res.json({ success: true, data: { ...client, unpaid_sales } });
   } catch (err) {
     console.error('[clients] GET /:id error:', err.message);
     return res.status(500).json({ success: false, error: 'Failed to fetch client' });

@@ -24,6 +24,7 @@ const authRouter     = require('./routes/auth');
 const productsRouter = require('./routes/products');
 const clientsRouter  = require('./routes/clients');
 const salesRouter    = require('./routes/sales');
+const paymentsRouter = require('./routes/payments');
 const syncRouter     = require('./routes/sync');
 const settingsRouter = require('./routes/settings');
 const reportsRouter  = require('./routes/reports');
@@ -78,6 +79,7 @@ app.use('/api/sync', syncRouter);
 app.use('/api/products', authenticate, productsRouter);
 app.use('/api/clients',  authenticate, clientsRouter);
 app.use('/api/sales',    authenticate, salesRouter);
+app.use('/api/payments', authenticate, paymentsRouter);
 app.use('/api/settings', authenticate, settingsRouter);
 app.use('/api/reports', authenticate, reportsRouter);
 

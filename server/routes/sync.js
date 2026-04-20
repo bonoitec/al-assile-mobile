@@ -237,83 +237,106 @@ router.get('/pull', (req, res) => {
   }
 
   const pull = db.transaction(() => {
-    // 1. Find unsynced sale IDs
-    let unsyncedRows;
-    if (since) {
-      unsyncedRows = db.prepare(`
-        SELECT DISTINCT entity_id AS sale_id
-        FROM sync_log
-        WHERE entity_type = 'sale' AND synced = 0 AND created_at > ?
-      `).all(since);
-    } else {
-      unsyncedRows = db.prepare(`
-        SELECT DISTINCT entity_id AS sale_id
-        FROM sync_log
-        WHERE entity_type = 'sale' AND synced = 0
-      `).all();
+    // ------------------------- SALES -------------------------
+    const saleQueryBase = since
+      ? `SELECT DISTINCT entity_id AS sale_id FROM sync_log
+         WHERE entity_type = 'sale' AND synced = 0 AND created_at > ?`
+      : `SELECT DISTINCT entity_id AS sale_id FROM sync_log
+         WHERE entity_type = 'sale' AND synced = 0`;
+    const saleRows = since ? db.prepare(saleQueryBase).all(since) : db.prepare(saleQueryBase).all();
+    const saleIds = saleRows.map(r => r.sale_id);
+
+    let salesOut = [];
+    if (saleIds.length > 0) {
+      const ph = saleIds.map(() => '?').join(',');
+      const sales = db.prepare(`
+        SELECT s.*, c.name AS client_name, c.phone AS client_phone, c.address AS client_address
+        FROM sales s LEFT JOIN clients c ON s.client_id = c.id
+        WHERE s.id IN (${ph})
+        ORDER BY s.created_at ASC
+      `).all(...saleIds);
+
+      const items = db.prepare(`
+        SELECT si.*, p.name AS product_name, p.unit AS product_unit
+        FROM sale_items si LEFT JOIN products p ON si.product_id = p.id
+        WHERE si.sale_id IN (${ph})
+      `).all(...saleIds);
+
+      const itemsBySaleId = {};
+      for (const it of items) (itemsBySaleId[it.sale_id] ||= []).push(it);
+
+      salesOut = sales.map(s => ({ ...s, items: itemsBySaleId[s.id] || [] }));
+
+      db.prepare(`
+        UPDATE sync_log SET synced = 1
+        WHERE entity_type = 'sale' AND entity_id IN (${ph})
+      `).run(...saleIds);
     }
 
-    if (unsyncedRows.length === 0) {
-      return [];
+    // ------------------------- PAYMENTS -------------------------
+    // Each unsynced sync_log entry for a payment carries an action:
+    //   create → return the full row from client_payments
+    //   update → return the current row (desktop computes delta from its copy)
+    //   delete → return a tombstone { id, __action: 'delete' } — the row is gone
+    // We collapse multiple entries per id to the LATEST action so the desktop
+    // only has to apply one operation per payment.
+    const payLogRows = since
+      ? db.prepare(`SELECT entity_id AS payment_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'payment' AND synced = 0 AND created_at > ?
+                    ORDER BY id ASC`).all(since)
+      : db.prepare(`SELECT entity_id AS payment_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'payment' AND synced = 0
+                    ORDER BY id ASC`).all();
+
+    // Latest action per payment wins
+    const latestAction = new Map();
+    const logIdsByPaymentId = new Map();
+    for (const row of payLogRows) {
+      latestAction.set(row.payment_id, row.action);
+      (logIdsByPaymentId.get(row.payment_id) || logIdsByPaymentId.set(row.payment_id, []).get(row.payment_id)).push(row.log_id);
     }
 
-    const saleIds = unsyncedRows.map(r => r.sale_id);
+    const paymentIds = [...latestAction.keys()];
+    let paymentsOut = [];
 
-    // 2. Fetch the full sale rows
-    //    SQLite does not support parameter binding for IN clauses with arrays,
-    //    so we build the placeholders safely from a validated integer list.
-    const safePlaceholders = saleIds.map(() => '?').join(',');
-    const sales = db.prepare(`
-      SELECT
-        s.*,
-        c.name    AS client_name,
-        c.phone   AS client_phone,
-        c.address AS client_address
-      FROM sales s
-      LEFT JOIN clients c ON s.client_id = c.id
-      WHERE s.id IN (${safePlaceholders})
-      ORDER BY s.created_at ASC
-    `).all(...saleIds);
+    if (paymentIds.length > 0) {
+      const ph = paymentIds.map(() => '?').join(',');
+      const existingRows = db.prepare(`
+        SELECT cp.*,
+          s.date   AS sale_date,
+          s.total  AS sale_total,
+          s.status AS sale_status
+        FROM client_payments cp
+        LEFT JOIN sales s ON cp.sale_id = s.id
+        WHERE cp.id IN (${ph})
+      `).all(...paymentIds);
+      const existingById = new Map(existingRows.map(r => [r.id, r]));
 
-    // 3. Fetch items for all returned sales in one query
-    const allItems = db.prepare(`
-      SELECT
-        si.*,
-        p.name AS product_name,
-        p.unit AS product_unit
-      FROM sale_items si
-      LEFT JOIN products p ON si.product_id = p.id
-      WHERE si.sale_id IN (${safePlaceholders})
-    `).all(...saleIds);
-
-    // Build a map so we can attach items to each sale without N+1 queries
-    const itemsBySaleId = {};
-    for (const item of allItems) {
-      if (!itemsBySaleId[item.sale_id]) {
-        itemsBySaleId[item.sale_id] = [];
+      for (const pid of paymentIds) {
+        const action = latestAction.get(pid);
+        const row = existingById.get(pid);
+        if (action === 'delete') {
+          paymentsOut.push({ id: pid, __action: 'delete' });
+        } else if (row) {
+          paymentsOut.push({ ...row, __action: action });
+        }
+        // If create/update but row missing (shouldn't happen), skip — log will
+        // still be marked synced below, but that's OK because the row is gone
+        // and nothing needs to happen on the desktop.
       }
-      itemsBySaleId[item.sale_id].push(item);
+
+      // Mark all the log entries (including the earlier obsolete ones) as synced
+      const allLogIds = [].concat(...logIdsByPaymentId.values());
+      const phLog = allLogIds.map(() => '?').join(',');
+      db.prepare(`UPDATE sync_log SET synced = 1 WHERE id IN (${phLog})`).run(...allLogIds);
     }
 
-    const result = sales.map(sale => ({
-      ...sale,
-      items: itemsBySaleId[sale.id] || []
-    }));
-
-    // 4. Mark these sales as synced
-    db.prepare(`
-      UPDATE sync_log
-      SET synced = 1
-      WHERE entity_type = 'sale'
-        AND entity_id IN (${safePlaceholders})
-    `).run(...saleIds);
-
-    return result;
+    return { sales: salesOut, payments: paymentsOut };
   });
 
   try {
-    const sales = pull();
-    return res.json({ success: true, sales });
+    const out = pull();
+    return res.json({ success: true, sales: out.sales, payments: out.payments });
   } catch (err) {
     console.error('[sync] GET /pull error:', err.message);
     return res.status(500).json({ success: false, error: 'Sync pull failed' });

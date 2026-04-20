@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Grid3X3, ShoppingCart, Receipt } from 'lucide-react';
+import { Grid3X3, ShoppingCart, Receipt, Users } from 'lucide-react';
 import { useCart } from '../hooks/useCart.jsx';
 import { t } from '../utils/i18n.js';
 
@@ -14,6 +14,7 @@ export default function BottomNav() {
     { path: '/', icon: Grid3X3, label: t('products') },
     { path: '/cart', icon: ShoppingCart, label: t('cart'), badge: true },
     { path: '/sales', icon: Receipt, label: t('sales') },
+    { path: '/clients', icon: Users, label: t('clients') || 'Clients' },
   ];
 
   return (
