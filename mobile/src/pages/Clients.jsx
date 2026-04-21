@@ -64,13 +64,27 @@ export default function Clients() {
 
   useEffect(() => { fetchClients(); }, []);
 
-  const filtered = clients.filter(c => {
-    if (filter === 'owes'   && !(c.balance < 0)) return false;
-    if (filter === 'credit' && !(c.balance > 0)) return false;
-    if (!query) return true;
-    const q = query.toLowerCase();
-    return (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(query);
-  });
+  const filtered = clients
+    .filter(c => {
+      if (filter === 'owes'   && !(c.balance < 0)) return false;
+      if (filter === 'credit' && !(c.balance > 0)) return false;
+      if (!query) return true;
+      const q = query.toLowerCase();
+      return (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(query);
+    })
+    // Debt-first sort: clients who owe rise to the top (by size of debt),
+    // then credit, then zero-balance. This makes the reminder flow land
+    // the cashier on the most urgent row without any extra taps.
+    .sort((a, b) => {
+      const ba = a.balance || 0;
+      const bb = b.balance || 0;
+      const aOwes = ba < 0;
+      const bOwes = bb < 0;
+      if (aOwes && !bOwes) return -1;
+      if (!aOwes && bOwes) return 1;
+      if (aOwes && bOwes) return ba - bb; // more negative = owes more → higher
+      return bb - ba;
+    });
 
   const totalOwed = clients.reduce((s, c) => s + Math.max(0, -(c.balance || 0)), 0);
   const totalCredit = clients.reduce((s, c) => s + Math.max(0, c.balance || 0), 0);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, ShoppingCart, RefreshCw, Package, ScanBarcode, LogOut } from 'lucide-react';
+import { Search, X, ShoppingCart, RefreshCw, Package, ScanBarcode, LogOut, ChevronRight } from 'lucide-react';
+import { formatCurrency } from '../utils/currency.js';
 import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi.jsx';
 import { useCart } from '../hooks/useCart.jsx';
@@ -27,6 +28,7 @@ export default function Products() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [lang, setLang] = useState(getLanguage());
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [debtors, setDebtors] = useState([]);
   const userMenuRef = useRef(null);
 
   const fetchProducts = useCallback(async (silent = false) => {
@@ -46,6 +48,17 @@ export default function Products() {
 
   useEffect(() => {
     fetchProducts();
+  }, []);
+
+  // Debt reminder — passive background fetch, fails silently so a network
+  // blip never breaks the home page.
+  useEffect(() => {
+    api.get('/api/clients')
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data?.data || []);
+        setDebtors(list.filter(c => (c.balance || 0) < 0));
+      })
+      .catch(() => {});
   }, []);
 
   const filtered = products.filter(p => {
@@ -262,6 +275,40 @@ export default function Products() {
             />
           </button>
         </div>
+
+        {/* Debt reminder banner — only shown when at least one client owes.
+            Passive nudge; tap routes to the Clients page (debtors sort to top). */}
+        {debtors.length > 0 && (
+          <motion.button
+            type="button"
+            onClick={() => navigate('/clients')}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-4 mb-3 flex items-center gap-3 px-4 py-2.5 rounded-xl touch-manipulation text-left"
+            style={{
+              background: 'rgba(245,158,11,0.10)',
+              border: '1px solid rgba(245,158,11,0.25)',
+            }}
+          >
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(245,158,11,0.15)' }}
+            >
+              <span className="text-lg">💰</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ color: '#fbbf24' }}>
+                {debtors.length} {debtors.length === 1 ? t('clientOwes') : t('clientsOwe')} · {formatCurrency(
+                  debtors.reduce((sum, d) => sum + Math.max(0, -(d.balance || 0)), 0)
+                )}
+              </p>
+              <p className="text-[11px]" style={{ color: '#d97706' }}>
+                {t('tapToReview')}
+              </p>
+            </div>
+            <ChevronRight size={16} style={{ color: '#fbbf24' }} />
+          </motion.button>
+        )}
 
         {/* Search bar */}
         <AnimatePresence>
