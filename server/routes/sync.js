@@ -248,18 +248,30 @@ router.get('/pull', (req, res) => {
     // "YYYY-MM-DD HH:MM:SS" (space separator) while `since` comes in as
     // ISO 8601 with T/Z. Raw string comparison mis-sorts them because
     // ' ' (0x20) < 'T' (0x54), so newer rows look older.
-    const saleQueryBase = since
-      ? `SELECT DISTINCT entity_id AS sale_id FROM sync_log
-         WHERE entity_type = 'sale' AND datetime(created_at) > datetime(?)`
-      : `SELECT DISTINCT entity_id AS sale_id FROM sync_log
-         WHERE entity_type = 'sale' AND synced = 0`;
-    const saleRows = since ? db.prepare(saleQueryBase).all(since) : db.prepare(saleQueryBase).all();
-    const saleIds = saleRows.map(r => r.sale_id);
+    // Collect all sale log events (create, delete) so we can emit an __action
+    // per sale. The `since` watermark filters by timestamp; the UPDATE to mark
+    // synced=1 is cosmetic (desktop dedupes by remote_id).
+    const saleLogRows = since
+      ? db.prepare(`SELECT entity_id AS sale_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'sale' AND datetime(created_at) > datetime(?)
+                    ORDER BY id ASC`).all(since)
+      : db.prepare(`SELECT entity_id AS sale_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'sale' AND synced = 0
+                    ORDER BY id ASC`).all();
+
+    // Latest action per sale wins (e.g. create then delete → tombstone)
+    const latestSaleAction = new Map();
+    const saleLogIds = [];
+    for (const r of saleLogRows) {
+      latestSaleAction.set(r.sale_id, r.action);
+      saleLogIds.push(r.log_id);
+    }
+    const saleIds = [...latestSaleAction.keys()];
 
     let salesOut = [];
     if (saleIds.length > 0) {
       const ph = saleIds.map(() => '?').join(',');
-      const sales = db.prepare(`
+      const rows = db.prepare(`
         SELECT s.*, c.name AS client_name, c.phone AS client_phone, c.address AS client_address
         FROM sales s LEFT JOIN clients c ON s.client_id = c.id
         WHERE s.id IN (${ph})
@@ -275,12 +287,25 @@ router.get('/pull', (req, res) => {
       const itemsBySaleId = {};
       for (const it of items) (itemsBySaleId[it.sale_id] ||= []).push(it);
 
-      salesOut = sales.map(s => ({ ...s, items: itemsBySaleId[s.id] || [] }));
+      const existingBySaleId = new Map(rows.map(r => [r.id, r]));
 
-      db.prepare(`
-        UPDATE sync_log SET synced = 1
-        WHERE entity_type = 'sale' AND entity_id IN (${ph})
-      `).run(...saleIds);
+      for (const sid of saleIds) {
+        const action = latestSaleAction.get(sid);
+        const row = existingBySaleId.get(sid);
+        if (action === 'delete') {
+          // Row is gone; emit a tombstone so the desktop can reverse its copy.
+          salesOut.push({ id: sid, __action: 'delete' });
+        } else if (row) {
+          salesOut.push({ ...row, items: itemsBySaleId[sid] || [], __action: action || 'create' });
+        }
+        // If create/update but the row is gone (shouldn't happen), we simply
+        // skip — the log is still consumed and the desktop has no work to do.
+      }
+
+      if (saleLogIds.length > 0) {
+        const phLog = saleLogIds.map(() => '?').join(',');
+        db.prepare(`UPDATE sync_log SET synced = 1 WHERE id IN (${phLog})`).run(...saleLogIds);
+      }
     }
 
     // ------------------------- PAYMENTS -------------------------

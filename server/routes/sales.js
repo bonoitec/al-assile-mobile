@@ -294,6 +294,86 @@ router.get('/:id', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// DELETE /api/sales/:id  -  Cancel a sale (undo as if it never happened)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reverses the entire sale atomically:
+ *   - Restores product stock
+ *   - Reverses the client balance adjustment (debt added or credit given)
+ *   - Removes any client_payments rows that reference this sale
+ *   - Deletes sale_items, then the sale itself
+ *   - Logs a sync_log entry with action='delete' so the desktop can mirror
+ *
+ * Intended for a "just made a mistake" workflow right after checkout. There
+ * is no time limit here; the UI is what presents the button only on the
+ * post-sale success screen. For accounting-correct partial corrections
+ * after the fact, use POST /:id/return which issues a return ticket.
+ */
+router.delete('/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid sale id' });
+  }
+
+  try {
+    const result = db.transaction(() => {
+      const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
+      if (!sale) throw new Error('SALE_NOT_FOUND');
+
+      // 1. Restore product stock from each line item
+      const items = db.prepare('SELECT product_id, quantity FROM sale_items WHERE sale_id = ?').all(id);
+      const restoreQty = db.prepare(
+        `UPDATE products SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      );
+      for (const it of items) restoreQty.run(it.quantity, it.product_id);
+
+      // 2. Reverse client balance if one was affected (mirrors the sale creation logic)
+      if (sale.client_id) {
+        if (sale.total > sale.paid_amount) {
+          // Partial/credit: balance was decreased by (total - paid); add it back.
+          const debt = sale.total - sale.paid_amount;
+          db.prepare(`UPDATE clients SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+            .run(debt, sale.client_id);
+        } else if (sale.paid_amount > sale.total) {
+          // Overpay: balance was increased by (paid - total); subtract it back.
+          const credit = sale.paid_amount - sale.total;
+          db.prepare(`UPDATE clients SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+            .run(credit, sale.client_id);
+        }
+      }
+
+      // 3. Detach any client_payments allocated to this sale. We emit a
+      //    sync_log delete event per payment so desktop tears them down too.
+      const attachedPayments = db.prepare('SELECT id FROM client_payments WHERE sale_id = ?').all(id);
+      for (const p of attachedPayments) {
+        db.prepare(`INSERT INTO sync_log (entity_type, entity_id, action, synced) VALUES ('payment', ?, 'delete', 0)`)
+          .run(p.id);
+      }
+      db.prepare('DELETE FROM client_payments WHERE sale_id = ?').run(id);
+
+      // 4. Delete sale items, then the sale itself
+      db.prepare('DELETE FROM sale_items WHERE sale_id = ?').run(id);
+      db.prepare('DELETE FROM sales WHERE id = ?').run(id);
+
+      // 5. Sync log — tells desktop to mirror the delete
+      db.prepare(`INSERT INTO sync_log (entity_type, entity_id, action, synced) VALUES ('sale', ?, 'delete', 0)`)
+        .run(id);
+
+      return { id, items_restored: items.length, payments_detached: attachedPayments.length };
+    })();
+
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    if (err.message === 'SALE_NOT_FOUND') {
+      return res.status(404).json({ success: false, error: 'Sale not found' });
+    }
+    console.error('[sales] DELETE /:id error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to cancel sale' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/sales/:id/payment  -  Record a payment on an existing sale
 // ---------------------------------------------------------------------------
 

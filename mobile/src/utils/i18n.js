@@ -213,6 +213,14 @@ const translations = {
     sold: 'sold',
     returnQtyMax: 'Return qty (max {n}):',
 
+    // Cancel sale
+    cancelSale: 'Cancel sale',
+    cancelSaleConfirm: 'Cancel this sale?',
+    cancelSaleConfirmDesc: 'Stock will be restored, the client balance unwound, and the sale removed on both phone and desktop. This cannot be undone.',
+    keepSale: 'Keep sale',
+    confirmCancel: 'Yes, cancel',
+    cancelSaleFailed: 'Failed to cancel sale',
+
     // Barcode scanner
     closeScanner: 'Close scanner',
     cameraPermissionDenied: 'Camera access denied',
@@ -436,6 +444,14 @@ const translations = {
     // Returns
     sold: 'مباع',
     returnQtyMax: 'كمية الإرجاع (بحد أقصى {n}):',
+
+    // Cancel sale
+    cancelSale: 'إلغاء البيع',
+    cancelSaleConfirm: 'إلغاء هذا البيع؟',
+    cancelSaleConfirmDesc: 'سيُعاد المخزون، ويُلغى تأثير البيع على رصيد العميل، ويُحذف البيع من الهاتف والحاسوب. لا يمكن التراجع عن هذا.',
+    keepSale: 'الاحتفاظ بالبيع',
+    confirmCancel: 'نعم، إلغاء',
+    cancelSaleFailed: 'فشل إلغاء البيع',
 
     // Barcode scanner
     closeScanner: 'إغلاق الماسح',

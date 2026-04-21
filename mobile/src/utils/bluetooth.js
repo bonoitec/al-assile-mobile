@@ -178,19 +178,10 @@ export async function printReceipt(sale, settings = {}, lang = null) {
 
   lines.push({ text: NARROW + '\n' });
 
-  // TVA breakdown
-  const tvaRate = parseFloat(settings.tva_rate ?? 19) / 100;
-  const totalHT = total / (1 + tvaRate);
-  const tvaAmount = total - totalHT;
-
+  // Totals (TVA breakdown removed per shop policy — shown as a single total)
   lines.push({ cmd: CMD.ALIGN_RIGHT });
-  lines.push({ text: `${isAr ? 'المجموع قبل الضريبة' : 'Subtotal HT'}: ${pad(totalHT.toFixed(2) + ' DA', 12, true)}` + '\n' });
-  lines.push({ text: `TVA (${Math.round(tvaRate * 100)}%):  ${pad(tvaAmount.toFixed(2) + ' DA', 12, true)}` + '\n' });
-  lines.push({ text: LINE + '\n' });
-
-  // Totals
   lines.push({ cmd: CMD.BOLD_ON });
-  lines.push({ text: `${isAr ? 'المجموع الكلي' : 'TOTAL TTC'}: ${pad(total.toFixed(2) + ' DA', 12, true)}` + '\n' });
+  lines.push({ text: `${isAr ? 'المجموع' : 'TOTAL'}: ${pad(total.toFixed(2) + ' DA', 12, true)}` + '\n' });
   lines.push({ cmd: CMD.BOLD_OFF });
   lines.push({ text: `${isAr ? 'المدفوع' : 'Paid'}:  ${paid.toFixed(2)} DA` + '\n' });
 
@@ -241,10 +232,6 @@ export function formatReceiptText(sale, settings = {}, lang = null) {
   const paid = sale.paid_amount || 0;
   const change = paid - total;
 
-  const tvaRate = parseFloat(settings.tva_rate ?? 19) / 100;
-  const totalHT = total / (1 + tvaRate);
-  const tvaAmount = total - totalHT;
-
   let text = `${businessName}\n`;
   text += `${isAr ? 'التاريخ' : 'Date'}: ${date.toLocaleString('fr-DZ')}\n`;
   text += `${isAr ? 'إيصال' : 'Receipt'} #${sale.id || 'N/A'}\n`;
@@ -263,10 +250,7 @@ export function formatReceiptText(sale, settings = {}, lang = null) {
   }
 
   text += `${NARROW}\n`;
-  text += `${isAr ? 'قبل الضريبة' : 'Subtotal HT'}:   ${totalHT.toFixed(2)} DA\n`;
-  text += `TVA (${Math.round(tvaRate * 100)}%):      ${tvaAmount.toFixed(2)} DA\n`;
-  text += `${LINE}\n`;
-  text += `${isAr ? 'المجموع الكلي' : 'TOTAL TTC'}:    ${total.toFixed(2)} DA\n`;
+  text += `${isAr ? 'المجموع' : 'TOTAL'}:    ${total.toFixed(2)} DA\n`;
   text += `${isAr ? 'المدفوع' : 'Paid'}:         ${paid.toFixed(2)} DA\n`;
   text += change >= 0
     ? `${isAr ? 'الباقي' : 'Change'}: ${change.toFixed(2)} DA\n`
