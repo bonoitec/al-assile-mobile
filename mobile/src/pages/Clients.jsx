@@ -237,7 +237,18 @@ export default function Clients() {
                   <User size={18} style={{ color: '#D4A574' }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{c.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-white truncate">{c.name}</p>
+                    {c.credit_blocked ? (
+                      <span
+                        className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide"
+                        style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                        title={t('cashOnlyClient')}
+                      >
+                        🚫 {t('cashOnlyClient')}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     {c.phone && (
                       <span className="text-xs flex items-center gap-1" style={{ color: '#6b7280' }}>
@@ -422,9 +433,13 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
                 const msg = t('whatsappReminderTemplate')
                   .replace('{name}', client.name || '')
                   .replace('{amount}', formatCurrency(owed));
-                const phone = String(client.phone).replace(/[^0-9]/g, '');
-                // Normalize Algerian numbers: 0555… → 213555…
-                const e164 = phone.startsWith('213') ? phone : phone.startsWith('0') ? '213' + phone.slice(1) : phone;
+                // Normalize to wa.me-friendly E.164 (no +, no spaces). Handle
+                // all common Algerian formats: 0555…, 213555…, 00213555…,
+                // +213555…, or a bare 555… (assume Algerian missing trunk 0).
+                let phone = String(client.phone).replace(/[^0-9]/g, '');
+                if (phone.startsWith('00')) phone = phone.slice(2);        // 00213… → 213…
+                if (phone.startsWith('0'))  phone = '213' + phone.slice(1); // 0555… → 213555…
+                const e164 = phone.startsWith('213') ? phone : '213' + phone;
                 window.open(`https://wa.me/${e164}?text=${encodeURIComponent(msg)}`, '_blank');
                 try {
                   await api.patch(`/api/clients/${client.id}/contact-note`, { note: t('reminderSentNote') });

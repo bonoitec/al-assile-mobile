@@ -25,6 +25,13 @@ export default function PaymentModal({ total, hasClient, clientName, clientCredi
   const blockedByCashOnly = clientCreditBlocked && (isPartial || isCredit || (isOverpay && overpayDisposition === 'credit'));
   const canComplete = (isCredit || numericPaid > 0) && (!needsClient || hasClient) && !blockedByCashOnly;
 
+  // Safety: if the cashier picks credit mode and THEN the cart's client
+  // turns out to be cash-only (mid-flow), snap back to cash so the UI
+  // reflects what is actually allowed.
+  useEffect(() => {
+    if (clientCreditBlocked && method === 'credit') setMethod('cash');
+  }, [clientCreditBlocked, method]);
+
   const quickAmounts = [
     { label: t('exact'), value: total },
     { label: Math.ceil(total / 100) * 100, value: Math.ceil(total / 100) * 100 },
@@ -158,22 +165,28 @@ export default function PaymentModal({ total, hasClient, clientName, clientCredi
               {[
                 { id: 'cash', label: t('cash'), icon: Banknote },
                 { id: 'credit', label: t('credit'), icon: CreditCard },
-              ].map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setMethod(id)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg
-                             text-sm font-semibold transition-all touch-manipulation"
-                  style={{
-                    background: method === id ? 'rgba(212,165,116,0.15)' : 'transparent',
-                    color: method === id ? '#D4A574' : '#4a5568',
-                    border: method === id ? '1px solid rgba(212,165,116,0.25)' : '1px solid transparent',
-                  }}
-                >
-                  <Icon size={16} />
-                  {label}
-                </button>
-              ))}
+              ].map(({ id, label, icon: Icon }) => {
+                const disabled = clientCreditBlocked && id === 'credit';
+                return (
+                  <button
+                    key={id}
+                    onClick={() => !disabled && setMethod(id)}
+                    disabled={disabled}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg
+                               text-sm font-semibold transition-all touch-manipulation"
+                    style={{
+                      background: method === id ? 'rgba(212,165,116,0.15)' : 'transparent',
+                      color: method === id ? '#D4A574' : '#4a5568',
+                      border: method === id ? '1px solid rgba(212,165,116,0.25)' : '1px solid transparent',
+                      opacity: disabled ? 0.35 : 1,
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
