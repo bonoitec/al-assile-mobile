@@ -214,6 +214,11 @@ const translations = {
     returnQtyMax: 'Return qty (max {n}):',
 
     // Error / status messages surfaced to users
+    bluetoothNotSupported: 'Web Bluetooth is not supported in this browser',
+    printerNoCharacteristic: 'Could not find writable characteristic on printer',
+    printerNotConnected: 'Printer not connected',
+    printerFallbackName: 'Printer',
+    productFallbackName: 'Product',
     sessionExpired: 'Session expired. Please log in again.',
     loginFailedGeneric: 'Login failed',
     failedToCreateSale: 'Failed to create sale',
@@ -482,6 +487,11 @@ const translations = {
     returnQtyMax: 'كمية الإرجاع (بحد أقصى {n}):',
 
     // Error / status messages surfaced to users
+    bluetoothNotSupported: 'متصفحك لا يدعم Web Bluetooth',
+    printerNoCharacteristic: 'تعذّر العثور على خاصية الكتابة في الطابعة',
+    printerNotConnected: 'الطابعة غير متصلة',
+    printerFallbackName: 'طابعة',
+    productFallbackName: 'منتج',
     sessionExpired: 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.',
     loginFailedGeneric: 'فشل تسجيل الدخول',
     failedToCreateSale: 'فشل إنشاء البيع',

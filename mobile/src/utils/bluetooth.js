@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 // ESC/POS command constants
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -40,7 +42,7 @@ let printerDevice = null;
 let printerChar = null;
 
 export async function connectPrinter() {
-  if (!isSupported()) throw new Error('Web Bluetooth is not supported in this browser');
+  if (!isSupported()) throw new Error(t('bluetoothNotSupported'));
 
   const device = await navigator.bluetooth.requestDevice({
     filters: [
@@ -66,7 +68,7 @@ export async function connectPrinter() {
       for (const charUUID of PRINTER_CHARACTERISTICS) {
         try {
           printerChar = await service.getCharacteristic(charUUID);
-          return { success: true, name: device.name || 'Printer' };
+          return { success: true, name: device.name || t('printerFallbackName') };
         } catch {
           // Try next characteristic
         }
@@ -76,7 +78,7 @@ export async function connectPrinter() {
     }
   }
 
-  throw new Error('Could not find writable characteristic on printer');
+  throw new Error(t('printerNoCharacteristic'));
 }
 
 export function isConnected() {
@@ -117,10 +119,10 @@ async function writeChunked(data) {
 }
 
 export async function printReceipt(sale, settings = {}, lang = null) {
-  if (!printerChar) throw new Error('Printer not connected');
+  if (!printerChar) throw new Error(t('printerNotConnected'));
 
   const isAr = (lang || (typeof localStorage !== 'undefined' && localStorage.getItem('mobile_lang')) || 'en') === 'ar';
-  const businessName = settings.business_name_fr || settings.businessName || 'Al Assile';
+  const businessName = settings.business_name_fr || settings.businessName || t('alAssile');
   const address = settings.business_address || settings.address || '';
   const phone = settings.business_phone || settings.phone || '';
   const LINE = '--------------------------------';
@@ -165,7 +167,7 @@ export async function printReceipt(sale, settings = {}, lang = null) {
   // Items
   const items = sale.items || sale.sale_items || [];
   for (const item of items) {
-    const name = (item.product_name || item.name || 'Product').slice(0, 17);
+    const name = (item.product_name || item.name || t('productFallbackName')).slice(0, 17);
     const qty = item.quantity || 1;
     const lineTotal = ((item.unit_price || item.selling_price || 0) * qty).toFixed(2);
     lines.push({ text: `${pad(name, 18)}${pad(qty, 5)}${pad(lineTotal, 9, true)}` + '\n' });
@@ -222,7 +224,7 @@ export async function printReceipt(sale, settings = {}, lang = null) {
 
 export function formatReceiptText(sale, settings = {}, lang = null) {
   const isAr = (lang || (typeof localStorage !== 'undefined' && localStorage.getItem('mobile_lang')) || 'en') === 'ar';
-  const businessName = settings.business_name_fr || settings.businessName || 'Al Assile';
+  const businessName = settings.business_name_fr || settings.businessName || t('alAssile');
   const LINE = '================================';
   const NARROW = '- - - - - - - - - - - - - - - -';
   const date = new Date(sale.created_at || Date.now());
@@ -239,7 +241,7 @@ export function formatReceiptText(sale, settings = {}, lang = null) {
   text += `${LINE}\n`;
 
   for (const item of items) {
-    const name = item.product_name || item.name || (isAr ? 'منتج' : 'Product');
+    const name = item.product_name || item.name || t('productFallbackName');
     const qty = item.quantity || 1;
     const price = (item.unit_price || 0) * qty;
     text += `${name} x${qty} = ${price.toFixed(2)} DA\n`;
