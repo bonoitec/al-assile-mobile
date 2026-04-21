@@ -148,7 +148,7 @@ export default function Login() {
                   background: 'rgba(255,255,255,0.05)',
                   border: '1px solid rgba(255,255,255,0.09)',
                 }}
-                aria-label="Toggle language"
+                aria-label={t('toggleLanguage')}
               >
                 {lang === 'en' ? '🇩🇿' : '🇬🇧'}
               </button>
@@ -237,7 +237,7 @@ export default function Login() {
                     onClick={() => setShowPassword(v => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors"
                     style={{ color: '#555' }}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? t('hidePassword') : t('showPassword')}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>

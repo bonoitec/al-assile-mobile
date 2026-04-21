@@ -167,7 +167,7 @@ function SaleRow({ sale, settings, onReturn }) {
                         color: '#f87171',
                         opacity: returning ? 0.5 : 1,
                       }}
-                      aria-label="Return items from this sale"
+                      aria-label={t('returnSaleItems')}
                     >
                       <RotateCcw size={14} />
                       {t('returnItems')}
@@ -301,7 +301,7 @@ export default function Sales() {
       list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       setSales(list);
     } catch (err) {
-      setError(err.message || 'Failed to load sales');
+      setError(err.message || t('failedToLoadSales'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -363,7 +363,7 @@ export default function Sales() {
             style={{
               background: searchOpen ? 'rgba(212,165,116,0.12)' : 'rgba(255,255,255,0.05)',
             }}
-            aria-label="Search sales"
+            aria-label={t('searchSalesLabel')}
           >
             {searchOpen ? (
               <X size={19} style={{ color: '#D4A574' }} />
@@ -377,7 +377,7 @@ export default function Sales() {
             disabled={refreshing}
             className="w-10 h-10 flex items-center justify-center rounded-full touch-manipulation"
             style={{ background: 'rgba(255,255,255,0.05)' }}
-            aria-label="Refresh sales"
+            aria-label={t('refreshSales')}
           >
             <RefreshCw
               size={18}
@@ -447,7 +447,7 @@ export default function Sales() {
                 colorScheme: 'dark',
                 fontSize: '14px',
               }}
-              aria-label="Select date to view sales"
+              aria-label={t('selectDateLabel')}
             />
             {!isToday && (
               <button

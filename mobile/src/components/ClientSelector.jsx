@@ -74,7 +74,7 @@ export default function ClientSelector({ selected, onSelect, onClose }) {
               onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-full"
               style={{ background: 'rgba(255,255,255,0.06)' }}
-              aria-label="Close"
+              aria-label={t('closeLabel')}
             >
               <X size={18} style={{ color: '#9ca3af' }} />
             </button>
@@ -223,7 +223,7 @@ export default function ClientSelector({ selected, onSelect, onClose }) {
                   className="w-8 h-8 border-2 rounded-full animate-spin"
                   style={{ borderColor: 'rgba(212,165,116,0.2)', borderTopColor: '#D4A574' }}
                 />
-                <p className="text-sm" style={{ color: '#4a5568' }}>Loading clients...</p>
+                <p className="text-sm" style={{ color: '#4a5568' }}>{t('loadingClients')}</p>
               </div>
             ) : filtered.length === 0 ? (
               <div className="py-12 text-center">

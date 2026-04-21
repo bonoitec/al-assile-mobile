@@ -37,7 +37,7 @@ export default function Products() {
       const data = await api.get('/api/products');
       setProducts(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message || 'Failed to load products');
+      setError(err.message || t('failedToLoadProducts'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -168,7 +168,7 @@ export default function Products() {
                 border: '1px solid rgba(212,165,116,0.25)',
                 color: '#D4A574',
               }}
-              aria-label="User menu"
+              aria-label={t('userMenuLabel')}
               aria-expanded={showUserMenu}
             >
               {(user?.username || 'U').slice(0, 1).toUpperCase()}
@@ -194,7 +194,7 @@ export default function Products() {
                     style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
                   >
                     <p className="text-sm font-semibold text-white truncate">
-                      {user?.username || 'User'}
+                      {user?.username || t('defaultUserLabel')}
                     </p>
                     <p className="text-xs mt-0.5 truncate capitalize" style={{ color: '#4a5568' }}>
                       {user?.role || t('salesperson')}
@@ -230,7 +230,7 @@ export default function Products() {
             onClick={() => setShowScanner(true)}
             className="w-10 h-10 flex items-center justify-center rounded-full touch-manipulation"
             style={{ background: 'rgba(212,165,116,0.08)', border: '1px solid rgba(212,165,116,0.15)' }}
-            aria-label="Scan barcode"
+            aria-label={t('scanBarcodeLabel')}
           >
             <ScanBarcode size={19} style={{ color: '#D4A574' }} />
           </button>
@@ -239,7 +239,7 @@ export default function Products() {
             onClick={() => { setSearchOpen(v => !v); if (searchOpen) setQuery(''); }}
             className="w-10 h-10 flex items-center justify-center rounded-full touch-manipulation"
             style={{ background: searchOpen ? 'rgba(212,165,116,0.12)' : 'rgba(255,255,255,0.05)' }}
-            aria-label="Search products"
+            aria-label={t('searchProductsLabel')}
           >
             {searchOpen ? (
               <X size={19} style={{ color: '#D4A574' }} />
@@ -253,7 +253,7 @@ export default function Products() {
             disabled={refreshing}
             className="w-10 h-10 flex items-center justify-center rounded-full touch-manipulation"
             style={{ background: 'rgba(255,255,255,0.05)' }}
-            aria-label="Refresh products"
+            aria-label={t('refreshProducts')}
           >
             <RefreshCw
               size={18}

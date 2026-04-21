@@ -125,7 +125,7 @@ export default function PaymentModal({ total, hasClient, clientName, onConfirm, 
               onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-full"
               style={{ background: 'rgba(255,255,255,0.06)' }}
-              aria-label="Close"
+              aria-label={t('closeLabel')}
             >
               <X size={18} style={{ color: '#9ca3af' }} />
             </button>

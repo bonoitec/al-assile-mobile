@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import { t } from '../utils/i18n.js';
 
 const AuthContext = createContext(null);
 
@@ -25,7 +26,7 @@ export function AuthProvider({ children }) {
       const data = await res.json();
 
       if (!res.ok) {
-        return { success: false, error: data.message || data.error || 'Login failed' };
+        return { success: false, error: data.message || data.error || t('loginFailedGeneric') };
       }
 
       const tok = data.token || data.access_token;
@@ -38,7 +39,7 @@ export function AuthProvider({ children }) {
 
       return { success: true };
     } catch (err) {
-      return { success: false, error: 'Network error. Please try again.' };
+      return { success: false, error: t('networkError') };
     }
   }, []);
 

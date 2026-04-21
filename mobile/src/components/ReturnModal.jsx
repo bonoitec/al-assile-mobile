@@ -131,7 +131,7 @@ export default function ReturnModal({ sale, onConfirm, onClose }) {
               onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-full touch-manipulation"
               style={{ background: 'rgba(255,255,255,0.06)' }}
-              aria-label="Close"
+              aria-label={t('closeLabel')}
             >
               <X size={18} style={{ color: '#9ca3af' }} />
             </button>
@@ -194,7 +194,7 @@ export default function ReturnModal({ sale, onConfirm, onClose }) {
                             background: sel.checked ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.06)',
                             border: sel.checked ? '1.5px solid rgba(239,68,68,0.5)' : '1.5px solid rgba(255,255,255,0.12)',
                           }}
-                          aria-label={sel.checked ? 'Deselect item' : 'Select item'}
+                          aria-label={sel.checked ? t('deselectItem') : t('selectItem')}
                         >
                           {sel.checked && (
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -244,7 +244,7 @@ export default function ReturnModal({ sale, onConfirm, onClose }) {
                                     background: 'rgba(255,255,255,0.06)',
                                     opacity: sel.qty <= 1 ? 0.3 : 1,
                                   }}
-                                  aria-label="Decrease return quantity"
+                                  aria-label={t('decreaseReturnQty')}
                                 >
                                   <Minus size={13} style={{ color: '#9ca3af' }} />
                                 </button>
@@ -257,7 +257,7 @@ export default function ReturnModal({ sale, onConfirm, onClose }) {
                                     background: 'rgba(255,255,255,0.06)',
                                     opacity: sel.qty >= maxQty ? 0.3 : 1,
                                   }}
-                                  aria-label="Increase return quantity"
+                                  aria-label={t('increaseReturnQty')}
                                 >
                                   <Plus size={13} style={{ color: '#9ca3af' }} />
                                 </button>
@@ -297,7 +297,7 @@ export default function ReturnModal({ sale, onConfirm, onClose }) {
               >
                 <div>
                   <p className="text-xs font-medium" style={{ color: '#6b7280' }}>
-                    {t('returnTotal')} ({checkedCount} item{checkedCount > 1 ? 's' : ''})
+                    {t('returnTotal')} ({checkedCount} {checkedCount === 1 ? t('itemSingular') : t('itemPlural')})
                   </p>
                 </div>
                 <p className="text-lg font-bold" style={{ color: '#f87171' }}>

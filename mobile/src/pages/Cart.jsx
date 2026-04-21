@@ -65,7 +65,7 @@ export default function Cart() {
       setCompletedSale({ ...sale, client_name: client?.name || null });
       clear();
     } catch (err) {
-      setError(err.message || 'Failed to create sale');
+      setError(err.message || t('failedToCreateSale'));
     } finally {
       setCompleting(false);
     }
@@ -250,7 +250,7 @@ export default function Cart() {
             onClick={() => navigate('/')}
             className="w-10 h-10 flex items-center justify-center rounded-full touch-manipulation"
             style={{ background: 'rgba(255,255,255,0.05)' }}
-            aria-label="Back to products"
+            aria-label={t('backToProducts')}
           >
             <ArrowLeft size={20} style={{ color: '#9ca3af' }} />
           </button>
@@ -262,7 +262,7 @@ export default function Cart() {
               onClick={clear}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold touch-manipulation"
               style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)', color: '#f87171' }}
-              aria-label="Clear cart"
+              aria-label={t('clearCart')}
             >
               <Trash2 size={14} />
               {t('clear')}
@@ -342,7 +342,7 @@ export default function Cart() {
                         onClick={() => updateQuantity(product.id, quantity - 1)}
                         className="w-8 h-8 flex items-center justify-center rounded-lg touch-manipulation"
                         style={{ background: 'rgba(255,255,255,0.06)' }}
-                        aria-label="Decrease quantity"
+                        aria-label={t('decreaseQty')}
                       >
                         <Minus size={14} style={{ color: '#9ca3af' }} />
                       </button>
@@ -355,7 +355,7 @@ export default function Cart() {
                           background: quantity >= maxQty ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.06)',
                           opacity: quantity >= maxQty ? 0.4 : 1,
                         }}
-                        aria-label="Increase quantity"
+                        aria-label={t('increaseQty')}
                       >
                         <Plus size={14} style={{ color: '#9ca3af' }} />
                       </button>

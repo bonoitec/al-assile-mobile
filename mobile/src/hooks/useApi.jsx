@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './useAuth.jsx';
+import { t } from '../utils/i18n.js';
 
 export function useApi() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export function useApi() {
         navigate('/login', { replace: true });
         setTimeout(() => { navigatingToLoginRef.current = false; }, 2000);
       }
-      throw new Error('Session expired. Please log in again.');
+      throw new Error(t('sessionExpired'));
     }
 
     if (res.status === 204) return null;

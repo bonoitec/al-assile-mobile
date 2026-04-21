@@ -295,7 +295,7 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
       await reload();
       onChanged();
     } catch (err) {
-      alert(err.message || 'Failed to delete');
+      alert(err.message || t('failedToDelete'));
     }
   };
 
@@ -666,7 +666,7 @@ function VersementModal({ client, onClose, onDone }) {
       });
       onDone();
     } catch (err) {
-      setError(err.message || 'Failed to record payment');
+      setError(err.message || t('failedToRecordPayment'));
     } finally {
       setSubmitting(false);
     }
@@ -896,7 +896,7 @@ function EditEntryModal({ entry, onClose, onDone }) {
       });
       onDone();
     } catch (err) {
-      setError(err.message || 'Failed to edit');
+      setError(err.message || t('failedToEdit'));
     } finally {
       setSubmitting(false);
     }
