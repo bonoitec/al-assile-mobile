@@ -213,10 +213,12 @@ const translations = {
     sold: 'sold',
     returnQtyMax: 'Return qty (max {n}):',
 
-    // Debt reminder
-    clientOwes: 'client owes',
+    // Debt reminder (clientOwes already defined above)
     clientsOwe: 'clients owe',
     tapToReview: 'Tap to review',
+    debtsToCollect: 'Debts to collect',
+    clientOwesLabel: 'Client',
+    biggestDebtor: 'Biggest debtor',
     // Error / status messages surfaced to users
     bluetoothNotSupported: 'Web Bluetooth is not supported in this browser',
     printerNoCharacteristic: 'Could not find writable characteristic on printer',
@@ -490,10 +492,12 @@ const translations = {
     sold: 'مباع',
     returnQtyMax: 'كمية الإرجاع (بحد أقصى {n}):',
 
-    // Debt reminder
-    clientOwes: 'عميل مدين',
+    // Debt reminder (clientOwes already defined above)
     clientsOwe: 'عملاء مدينون',
     tapToReview: 'اضغط للمراجعة',
+    debtsToCollect: 'ديون لتحصيلها',
+    clientOwesLabel: 'العميل',
+    biggestDebtor: 'أكبر مدين',
     // Error / status messages surfaced to users
     bluetoothNotSupported: 'متصفحك لا يدعم Web Bluetooth',
     printerNoCharacteristic: 'تعذّر العثور على خاصية الكتابة في الطابعة',

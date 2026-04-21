@@ -276,39 +276,77 @@ export default function Products() {
           </button>
         </div>
 
-        {/* Debt reminder banner — only shown when at least one client owes.
-            Passive nudge; tap routes to the Clients page (debtors sort to top). */}
-        {debtors.length > 0 && (
-          <motion.button
-            type="button"
-            onClick={() => navigate('/clients')}
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mx-4 mb-3 flex items-center gap-3 px-4 py-2.5 rounded-xl touch-manipulation text-left"
-            style={{
-              background: 'rgba(245,158,11,0.10)',
-              border: '1px solid rgba(245,158,11,0.25)',
-            }}
-          >
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(245,158,11,0.15)' }}
+        {/* Debt reminder — two-tier card. Top line is the headline number
+            (biggest debt), bottom row is the "N clients · total · review".
+            RTL-safe: amounts stay LTR so digits read correctly in Arabic. */}
+        {debtors.length > 0 && (() => {
+          const isRTL = lang === 'ar';
+          const totalOwed = debtors.reduce((sum, d) => sum + Math.max(0, -(d.balance || 0)), 0);
+          // Sort by owed amount; biggest first is what the shopkeeper acts on
+          const topDebtor = [...debtors].sort((a, b) => (a.balance || 0) - (b.balance || 0))[0];
+          const topOwed = Math.max(0, -(topDebtor.balance || 0));
+          return (
+            <motion.button
+              type="button"
+              onClick={() => navigate('/clients')}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              dir={isRTL ? 'rtl' : 'ltr'}
+              className="mx-4 mb-3 w-[calc(100%-2rem)] overflow-hidden rounded-2xl touch-manipulation text-left"
+              style={{
+                background: 'linear-gradient(135deg, rgba(245,158,11,0.14), rgba(239,68,68,0.10))',
+                border: '1px solid rgba(245,158,11,0.3)',
+              }}
             >
-              <span className="text-lg">💰</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate" style={{ color: '#fbbf24' }}>
-                {debtors.length} {debtors.length === 1 ? t('clientOwes') : t('clientsOwe')} · {formatCurrency(
-                  debtors.reduce((sum, d) => sum + Math.max(0, -(d.balance || 0)), 0)
+              {/* Headline: total amount owed, BIG */}
+              <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'rgba(245,158,11,0.2)' }}
+                >
+                  <span className="text-xl">💰</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#d97706' }}>
+                    {t('debtsToCollect')}
+                  </p>
+                  <p className="text-xl font-bold" style={{ color: '#fbbf24' }} dir="ltr">
+                    {formatCurrency(totalOwed)}
+                  </p>
+                </div>
+                <ChevronRight
+                  size={18}
+                  style={{
+                    color: '#fbbf24',
+                    transform: isRTL ? 'scaleX(-1)' : 'none',
+                  }}
+                />
+              </div>
+              {/* Secondary: top debtor preview */}
+              <div
+                className="flex items-center gap-2 px-4 py-2 border-t"
+                style={{ borderColor: 'rgba(245,158,11,0.15)', background: 'rgba(0,0,0,0.15)' }}
+              >
+                <span className="text-xs" style={{ color: '#a16207' }}>
+                  {debtors.length === 1
+                    ? `${t('clientOwesLabel')}:`
+                    : `${t('biggestDebtor')}:`}
+                </span>
+                <span className="text-xs font-semibold truncate flex-1" style={{ color: '#fbbf24' }}>
+                  {topDebtor.name}
+                </span>
+                <span className="text-xs font-bold" style={{ color: '#f87171' }} dir="ltr">
+                  {formatCurrency(topOwed)}
+                </span>
+                {debtors.length > 1 && (
+                  <span className="text-[10px]" style={{ color: '#a16207' }}>
+                    +{debtors.length - 1}
+                  </span>
                 )}
-              </p>
-              <p className="text-[11px]" style={{ color: '#d97706' }}>
-                {t('tapToReview')}
-              </p>
-            </div>
-            <ChevronRight size={16} style={{ color: '#fbbf24' }} />
-          </motion.button>
-        )}
+              </div>
+            </motion.button>
+          );
+        })()}
 
         {/* Search bar */}
         <AnimatePresence>
