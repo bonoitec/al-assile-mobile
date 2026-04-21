@@ -233,6 +233,24 @@ const initDatabase = (db) => {
     try { db.pragma('foreign_keys = ON'); } catch (_) {}
   }
 
+  // Migration: add credit-block flag + last-contact metadata to clients.
+  // These mirror the desktop schema so the sync-push full replacement carries
+  // the fields through. Idempotent via a PRAGMA table_info check.
+  try {
+    const cols = db.prepare("PRAGMA table_info(clients)").all().map(c => c.name);
+    if (!cols.includes('credit_blocked')) {
+      db.exec('ALTER TABLE clients ADD COLUMN credit_blocked INTEGER DEFAULT 0');
+    }
+    if (!cols.includes('last_contact_note')) {
+      db.exec('ALTER TABLE clients ADD COLUMN last_contact_note TEXT');
+    }
+    if (!cols.includes('last_contact_at')) {
+      db.exec('ALTER TABLE clients ADD COLUMN last_contact_at DATETIME');
+    }
+  } catch (e) {
+    console.log('[schema] clients columns migration:', e.message);
+  }
+
   console.log('[schema] Database initialized successfully');
 };
 

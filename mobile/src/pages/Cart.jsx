@@ -547,6 +547,7 @@ export default function Cart() {
           total={total}
           hasClient={!!client}
           clientName={client?.name || null}
+          clientCreditBlocked={!!client?.credit_blocked}
           onConfirm={handleCompleteSale}
           onClose={() => setShowPaymentModal(false)}
         />

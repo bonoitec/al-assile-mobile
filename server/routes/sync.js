@@ -129,24 +129,31 @@ router.post('/push', (req, res) => {
       deductQty.run(qty, parseInt(productId, 10));
     }
 
-    // 4. Replace clients
+    // 4. Replace clients. credit_blocked and last_contact fields mirror the
+    //    desktop schema; the desktop is source of truth so we trust whatever
+    //    comes in. Missing fields (older desktop build) default safely.
     db.prepare('DELETE FROM clients').run();
     const insertClient = db.prepare(`
       INSERT INTO clients
-        (id, name, phone, address, email, notes, balance, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, name, phone, address, email, notes, balance,
+         credit_blocked, last_contact_note, last_contact_at,
+         created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const c of clients) {
       insertClient.run(
         c.id,
         c.name,
-        c.phone      || null,
-        c.address    || null,
-        c.email      || null,
-        c.notes      || null,
-        c.balance    || 0,
-        c.created_at || new Date().toISOString(),
-        c.updated_at || new Date().toISOString()
+        c.phone             || null,
+        c.address           || null,
+        c.email             || null,
+        c.notes             || null,
+        c.balance           || 0,
+        c.credit_blocked ? 1 : 0,
+        c.last_contact_note || null,
+        c.last_contact_at   || null,
+        c.created_at        || new Date().toISOString(),
+        c.updated_at        || new Date().toISOString()
       );
     }
 

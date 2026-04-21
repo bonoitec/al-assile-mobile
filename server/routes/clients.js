@@ -140,4 +140,41 @@ router.post('/', (req, res) => {
   }
 });
 
+/**
+ * PATCH /api/clients/:id/contact-note
+ * Body: { note?: string }
+ *
+ * Stamps last_contact_at = now and saves an optional free-form note. Used by
+ * the mobile WhatsApp-reminder button so the shopkeeper can tell at a glance
+ * whether they already nudged this client today. Sync log lets the desktop
+ * mirror it; the full-clients push carries the updated fields.
+ */
+router.patch('/:id/contact-note', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid client id' });
+  }
+
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 500) : null;
+
+  try {
+    const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(id);
+    if (!client) return res.status(404).json({ success: false, error: 'Client not found' });
+
+    db.prepare(`
+      UPDATE clients SET
+        last_contact_note = ?,
+        last_contact_at   = CURRENT_TIMESTAMP,
+        updated_at        = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(note || null, id);
+
+    const updated = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+    return res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('[clients] PATCH /:id/contact-note error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to record contact' });
+  }
+});
+
 module.exports = router;

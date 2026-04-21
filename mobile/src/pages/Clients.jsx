@@ -412,6 +412,37 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
             background: 'rgba(13,17,32,0.96)',
           }}
         >
+          {/* WhatsApp reminder: only relevant when client owes money AND has a
+              phone. Opens wa.me with a prefilled, respectful reminder and
+              PATCHes /contact-note so the shopkeeper knows they just nudged. */}
+          {client?.phone && (client.balance || 0) < 0 ? (
+            <button
+              onClick={async () => {
+                const owed = Math.abs(client.balance || 0);
+                const msg = t('whatsappReminderTemplate')
+                  .replace('{name}', client.name || '')
+                  .replace('{amount}', formatCurrency(owed));
+                const phone = String(client.phone).replace(/[^0-9]/g, '');
+                // Normalize Algerian numbers: 0555… → 213555…
+                const e164 = phone.startsWith('213') ? phone : phone.startsWith('0') ? '213' + phone.slice(1) : phone;
+                window.open(`https://wa.me/${e164}?text=${encodeURIComponent(msg)}`, '_blank');
+                try {
+                  await api.patch(`/api/clients/${client.id}/contact-note`, { note: t('reminderSentNote') });
+                  await reload();
+                  onChanged();
+                } catch { /* offline or server hiccup — don't block the user */ }
+              }}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-base touch-manipulation mb-2"
+              style={{
+                background: 'rgba(37,211,102,0.15)',
+                border: '1px solid rgba(37,211,102,0.4)',
+                color: '#25d366',
+              }}
+            >
+              <span className="text-lg">💬</span>
+              {t('sendWhatsAppReminder')}
+            </button>
+          ) : null}
           <button
             onClick={() => setShowVersement(true)}
             disabled={!client}
@@ -466,6 +497,35 @@ function OverviewTab({ client }) {
 
   return (
     <div className="space-y-3 pt-1">
+      {/* Cash-only banner — shown whenever the admin has flagged this client. */}
+      {client.credit_blocked ? (
+        <div
+          className="rounded-xl p-3 flex items-center gap-2"
+          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}
+        >
+          <span className="text-base">🚫</span>
+          <div className="flex-1">
+            <p className="text-xs font-bold" style={{ color: '#f87171' }}>{t('cashOnlyClient')}</p>
+            <p className="text-[10px]" style={{ color: '#6b7280' }}>{t('cashOnlyClientDesc')}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Last contact — shown when a reminder was recently sent */}
+      {client.last_contact_at ? (
+        <div
+          className="rounded-xl p-3"
+          style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.15)' }}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: '#60a5fa' }}>
+            {t('lastContactAt')}: {new Date(client.last_contact_at).toLocaleDateString('fr-DZ', { day: '2-digit', month: 'short' })}
+          </p>
+          {client.last_contact_note ? (
+            <p className="text-xs italic" style={{ color: '#9ca3af' }}>“{client.last_contact_note}”</p>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Balance card — plain language */}
       <div
         className="rounded-2xl p-4"

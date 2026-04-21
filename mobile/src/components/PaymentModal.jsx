@@ -6,8 +6,10 @@ import { t } from '../utils/i18n.js';
 
 const roundMoney = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
-export default function PaymentModal({ total, hasClient, clientName, onConfirm, onClose }) {
+export default function PaymentModal({ total, hasClient, clientName, clientCreditBlocked = false, onConfirm, onClose }) {
   const [amountPaid, setAmountPaid] = useState('');
+  // When the client is flagged cash-only, force 'cash' mode; user can't switch
+  // to credit. Partial/credit buttons are blocked below via the amount logic.
   const [method, setMethod] = useState('cash'); // 'cash' | 'credit'
   const [notes, setNotes] = useState('');
   // When the customer gives MORE than total, ask: change vs credit
@@ -19,7 +21,9 @@ export default function PaymentModal({ total, hasClient, clientName, onConfirm, 
   const isOverpay = !isCredit && numericPaid > total && change > 0;
   const isPartial = !isCredit && numericPaid > 0 && numericPaid < total;
   const needsClient = isCredit || isPartial || (isOverpay && overpayDisposition === 'credit');
-  const canComplete = (isCredit || numericPaid > 0) && (!needsClient || hasClient);
+  // Block completion when a cash-only client is mid-partial/credit flow.
+  const blockedByCashOnly = clientCreditBlocked && (isPartial || isCredit || (isOverpay && overpayDisposition === 'credit'));
+  const canComplete = (isCredit || numericPaid > 0) && (!needsClient || hasClient) && !blockedByCashOnly;
 
   const quickAmounts = [
     { label: t('exact'), value: total },
@@ -362,6 +366,27 @@ export default function PaymentModal({ total, hasClient, clientName, onConfirm, 
                 <p className="text-xs mt-1" style={{ color: '#6b7280' }}>
                   {formatCurrency(total)} {t('addedToBalance')}
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* Cash-only client warning — highest priority, shown when the client
+              is flagged and the cashier is attempting partial/credit. */}
+          {blockedByCashOnly && (
+            <div className="px-5 pb-4">
+              <div
+                className="rounded-xl p-4 flex items-start gap-3"
+                style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.3)' }}
+              >
+                <span className="text-xl flex-shrink-0">🚫</span>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#f87171' }}>
+                    {t('clientIsCashOnly')}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>
+                    {t('clientIsCashOnlyDesc')}
+                  </p>
+                </div>
               </div>
             </div>
           )}

@@ -219,6 +219,16 @@ const translations = {
     debtsToCollect: 'Debts to collect',
     clientOwesLabel: 'Client',
     biggestDebtor: 'Biggest debtor',
+    // Cash-only
+    cashOnlyClient: 'Cash-only client',
+    cashOnlyClientDesc: 'Admin flagged this client. Full cash only — no partial, no credit.',
+    clientIsCashOnly: 'This client is marked cash-only',
+    clientIsCashOnlyDesc: 'Partial and credit are disabled. Take the full amount in cash, or ask the admin.',
+    // Last contact / WhatsApp
+    lastContactAt: 'Last contact',
+    sendWhatsAppReminder: 'Send WhatsApp reminder',
+    whatsappReminderTemplate: 'Hi {name}, a gentle reminder you still have a balance of {amount} with our shop. Thank you.',
+    reminderSentNote: 'Reminder sent via WhatsApp',
     // Error / status messages surfaced to users
     bluetoothNotSupported: 'Web Bluetooth is not supported in this browser',
     printerNoCharacteristic: 'Could not find writable characteristic on printer',
@@ -498,6 +508,16 @@ const translations = {
     debtsToCollect: 'ديون لتحصيلها',
     clientOwesLabel: 'العميل',
     biggestDebtor: 'أكبر مدين',
+    // Cash-only
+    cashOnlyClient: 'عميل نقداً فقط',
+    cashOnlyClientDesc: 'قام المدير بتمييز هذا العميل. نقداً بالكامل فقط — لا دفع جزئي ولا دين.',
+    clientIsCashOnly: 'هذا العميل نقداً فقط',
+    clientIsCashOnlyDesc: 'الدفع الجزئي والدين معطّلان. اقبض المبلغ كاملاً نقداً، أو اطلب من المدير.',
+    // Last contact / WhatsApp
+    lastContactAt: 'آخر تواصل',
+    sendWhatsAppReminder: 'إرسال تذكير واتساب',
+    whatsappReminderTemplate: 'السلام عليكم {name}، تذكير بسيط بأن لديكم رصيد غير مسدد قدره {amount} لدى المحل. شكراً لكم.',
+    reminderSentNote: 'تم إرسال تذكير عبر واتساب',
     // Error / status messages surfaced to users
     bluetoothNotSupported: 'متصفحك لا يدعم Web Bluetooth',
     printerNoCharacteristic: 'تعذّر العثور على خاصية الكتابة في الطابعة',
