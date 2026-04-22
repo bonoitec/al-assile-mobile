@@ -248,6 +248,7 @@ const translations = {
     failedToEdit: 'Failed to edit',
     failedToLoadProducts: 'Failed to load products',
     failedToLoadSales: 'Failed to load sales',
+    failedToLoadAudit: 'Failed to load audit',
     loadingClients: 'Loading clients...',
     defaultUserLabel: 'User',
     // Accessibility labels
@@ -574,6 +575,7 @@ const translations = {
     failedToEdit: 'فشل التعديل',
     failedToLoadProducts: 'فشل تحميل المنتجات',
     failedToLoadSales: 'فشل تحميل المبيعات',
+    failedToLoadAudit: 'فشل تحميل الفحص',
     loadingClients: 'جاري تحميل العملاء...',
     defaultUserLabel: 'مستخدم',
     // Accessibility labels

@@ -1095,7 +1095,7 @@ function EditEntryModal({ entry, onClose, onDone }) {
           </div>
           <div>
             <label className="text-xs font-semibold" style={{ color: '#6b7280' }}>
-              {t('notes')}
+              {t('clientNotes')}
             </label>
             <input
               type="text"

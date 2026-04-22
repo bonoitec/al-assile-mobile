@@ -459,7 +459,7 @@ function AuditTab() {
       const res = await api.get('/api/clients/audit');
       setData(res?.data || res);
     } catch (err) {
-      setError(err.message || 'Failed to load audit');
+      setError(err.message || t('failedToLoadAudit'));
     } finally {
       setLoading(false);
     }
