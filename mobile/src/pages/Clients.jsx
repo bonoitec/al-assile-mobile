@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, X, Users, User, Phone, RefreshCw, ChevronRight,
-  Wallet, History, Trash2, Edit2, AlertTriangle,
+  Wallet, History, Trash2, Edit2, AlertTriangle, UserPlus, Loader2,
 } from 'lucide-react';
 import { useApi } from '../hooks/useApi.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -47,6 +47,7 @@ export default function Clients() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all'); // 'all' | 'owes' | 'credit'
   const [selectedId, setSelectedId] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   const fetchClients = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -113,6 +114,17 @@ export default function Clients() {
               style={{ color: '#D4A574' }}
               className={refreshing ? 'animate-spin' : ''}
             />
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="w-10 h-10 flex items-center justify-center rounded-full touch-manipulation ml-1"
+            style={{
+              background: 'rgba(16,185,129,0.12)',
+              border: '1px solid rgba(16,185,129,0.3)',
+            }}
+            aria-label={t('addNewClient')}
+          >
+            <UserPlus size={18} style={{ color: '#34d399' }} />
           </button>
         </div>
 
@@ -276,6 +288,22 @@ export default function Clients() {
             // Server gates adjustment edit/delete to 'admin' only — match UI so
             // managers don't see buttons that would 403 when clicked.
             isAdmin={user?.role === 'admin'}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Add client sheet */}
+      <AnimatePresence>
+        {showAdd && (
+          <AddClientSheet
+            onClose={() => setShowAdd(false)}
+            onCreated={(newClient) => {
+              setShowAdd(false);
+              fetchClients(true);
+              // Auto-open the newly-created client so the cashier can go
+              // straight into recording a first payment / editing details.
+              if (newClient?.id) setSelectedId(newClient.id);
+            }}
           />
         )}
       </AnimatePresence>
@@ -1078,6 +1106,165 @@ function EditEntryModal({ entry, onClose, onDone }) {
             }}
           >
             {submitting ? '...' : t('save')}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/**
+ * Bottom-sheet for creating a new client. Keeps only the fields a salesperson
+ * realistically fills on the phone: name (required), phone, address, notes.
+ * Credit-block and email are admin-only and set later via the desktop.
+ * On success, the parent receives the created row so it can auto-open the
+ * detail sheet for immediate follow-up work (e.g. recording an initial sale).
+ */
+function AddClientSheet({ onClose, onCreated }) {
+  const api = useApi();
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const canSubmit = name.trim().length > 0 && !submitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await api.post('/api/clients', {
+        name: name.trim(),
+        phone: phone.trim() || null,
+        address: address.trim() || null,
+        notes: notes.trim() || null,
+      });
+      const created = res?.data || res;
+      onCreated(created);
+    } catch (err) {
+      setError(err?.message || t('failedToCreateClient'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget && !submitting) onClose(); }}
+    >
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+        className="absolute bottom-0 left-0 right-0 rounded-t-3xl flex flex-col"
+        style={{
+          background: '#0d1120',
+          border: '1px solid rgba(255,255,255,0.08)',
+          maxHeight: '85vh',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
+        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(16,185,129,0.15)' }}
+            >
+              <UserPlus size={16} style={{ color: '#34d399' }} />
+            </div>
+            <h2 className="text-base font-bold text-white">{t('addNewClient')}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="w-8 h-8 flex items-center justify-center rounded-full"
+            style={{ background: 'rgba(255,255,255,0.06)' }}
+            aria-label={t('closeLabel')}
+          >
+            <X size={18} style={{ color: '#9ca3af' }} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto scroll-touch px-5 pb-3 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>
+              {t('clientName')} <span style={{ color: '#f87171' }}>*</span>
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+              placeholder={t('clientName')}
+              className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>{t('clientPhone')}</label>
+            <input
+              type="tel"
+              inputMode="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="0555 123 456"
+              className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>{t('clientAddress')}</label>
+            <input
+              type="text"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              placeholder={t('clientAddress')}
+              className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>{t('clientNotes')}</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={2}
+              placeholder={t('notesOptional')}
+              className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none resize-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
+            />
+          </div>
+          {error ? <p className="text-xs text-center" style={{ color: '#f87171' }}>{error}</p> : null}
+        </div>
+        <div
+          className="px-5 py-3 flex-shrink-0"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.07)', background: 'rgba(13,17,32,0.96)' }}
+        >
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-white text-base touch-manipulation"
+            style={{
+              background: canSubmit
+                ? 'linear-gradient(135deg, #065f46 0%, #10b981 100%)'
+                : 'rgba(255,255,255,0.04)',
+              border: canSubmit ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(255,255,255,0.06)',
+              opacity: canSubmit ? 1 : 0.5,
+            }}
+          >
+            {submitting ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
+            {t('addClient')}
           </button>
         </div>
       </motion.div>

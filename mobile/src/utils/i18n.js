@@ -219,6 +219,11 @@ const translations = {
     debtsToCollect: 'Debts to collect',
     clientOwesLabel: 'Client',
     biggestDebtor: 'Biggest debtor',
+    // Add client
+    clientAddress: 'Address',
+    clientNotes: 'Notes',
+    addClient: 'Add client',
+    failedToCreateClient: 'Failed to create client',
     // Cash-only
     cashOnlyClient: 'Cash-only client',
     cashOnlyClientDesc: 'Admin flagged this client. Full cash only — no partial, no credit.',
@@ -508,6 +513,11 @@ const translations = {
     debtsToCollect: 'ديون لتحصيلها',
     clientOwesLabel: 'العميل',
     biggestDebtor: 'أكبر مدين',
+    // Add client
+    clientAddress: 'العنوان',
+    clientNotes: 'ملاحظات',
+    addClient: 'إضافة عميل',
+    failedToCreateClient: 'فشل إنشاء العميل',
     // Cash-only
     cashOnlyClient: 'عميل نقداً فقط',
     cashOnlyClientDesc: 'قام المدير بتمييز هذا العميل. نقداً بالكامل فقط — لا دفع جزئي ولا دين.',
