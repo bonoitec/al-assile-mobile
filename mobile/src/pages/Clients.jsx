@@ -1156,11 +1156,21 @@ function AddClientSheet({ onClose, onCreated }) {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
-  const [openingBalance, setOpeningBalance] = useState('');
+  // 'none' | 'credit' | 'owes'
+  const [balanceSign, setBalanceSign] = useState('none');
+  const [balanceAmount, setBalanceAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const canSubmit = name.trim().length > 0 && !submitting;
+
+  const computeInitialBalance = () => {
+    if (balanceSign === 'none') return 0;
+    const amt = parseFloat(balanceAmount) || 0;
+    if (balanceSign === 'credit') return amt;
+    if (balanceSign === 'owes') return -amt;
+    return 0;
+  };
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -1172,7 +1182,7 @@ function AddClientSheet({ onClose, onCreated }) {
         phone: phone.trim() || null,
         address: address.trim() || null,
         notes: notes.trim() || null,
-        initial_balance: parseFloat(openingBalance) || 0,
+        initial_balance: computeInitialBalance(),
       });
       const created = res?.data || res;
       onCreated(created);
@@ -1279,16 +1289,49 @@ function AddClientSheet({ onClose, onCreated }) {
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>{t('openingBalance')}</label>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={openingBalance}
-              onChange={e => setOpeningBalance(e.target.value)}
-              placeholder="0"
-              className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
-            />
-            <p className="text-[11px] mt-1.5" style={{ color: '#4a5568' }}>{t('openingBalanceHelp')}</p>
+            {/* Segmented toggle — three states */}
+            <div
+              className="flex rounded-xl p-1 mb-2"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              {[
+                { id: 'none',   label: t('openingBalanceNone'),   activeColor: '#9ca3af',  activeBg: 'rgba(156,163,175,0.12)',  activeBorder: 'rgba(156,163,175,0.3)'  },
+                { id: 'credit', label: t('openingBalanceCredit'), activeColor: '#34d399',  activeBg: 'rgba(16,185,129,0.12)',   activeBorder: 'rgba(16,185,129,0.3)'   },
+                { id: 'owes',   label: t('openingBalanceOwes'),   activeColor: '#f87171',  activeBg: 'rgba(239,68,68,0.12)',    activeBorder: 'rgba(239,68,68,0.3)'    },
+              ].map(({ id, label, activeColor, activeBg, activeBorder }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setBalanceSign(id)}
+                  className="flex-1 py-2 px-1 rounded-lg text-[11px] font-semibold transition-all touch-manipulation leading-tight"
+                  style={{
+                    background:   balanceSign === id ? activeBg      : 'transparent',
+                    color:        balanceSign === id ? activeColor    : '#4a5568',
+                    border:       balanceSign === id ? `1px solid ${activeBorder}` : '1px solid transparent',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Amount field — only when a sign is selected */}
+            {balanceSign !== 'none' && (
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                value={balanceAmount}
+                onChange={e => setBalanceAmount(e.target.value)}
+                placeholder="0"
+                className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${balanceSign === 'credit' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                  fontSize: '16px',
+                  color: balanceSign === 'credit' ? '#34d399' : '#f87171',
+                }}
+              />
+            )}
           </div>
           {error ? <p className="text-xs text-center" style={{ color: '#f87171' }}>{error}</p> : null}
         </div>

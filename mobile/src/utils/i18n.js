@@ -297,6 +297,15 @@ const translations = {
     fixBalance: 'Fix',
     fixingBalance: 'Fixing...',
     balanceRepaired: 'Balance repaired',
+    confirmFixBalance: 'Fix this balance?',
+    currentBalance: 'Current',
+    willBecome: 'Will become',
+    confirmFix: 'Yes, fix',
+    repairedFromTo: 'Repaired',
+    adminOnlyShort: 'Admin only',
+    openingBalanceCredit: 'Client has credit',
+    openingBalanceOwes: 'Client owes us',
+    openingBalanceNone: 'No opening balance',
 
     // Cancel sale
     cancelSale: 'Cancel sale',
@@ -614,6 +623,15 @@ const translations = {
     fixBalance: 'إصلاح',
     fixingBalance: 'جاري الإصلاح...',
     balanceRepaired: 'تم إصلاح الرصيد',
+    confirmFixBalance: 'هل تريد إصلاح هذا الرصيد؟',
+    currentBalance: 'الحالي',
+    willBecome: 'سيصبح',
+    confirmFix: 'نعم، إصلاح',
+    repairedFromTo: 'تم الإصلاح',
+    adminOnlyShort: 'للمدير فقط',
+    openingBalanceCredit: 'للعميل رصيد',
+    openingBalanceOwes: 'العميل مدين',
+    openingBalanceNone: 'لا يوجد رصيد افتتاحي',
 
     // Cancel sale
     cancelSale: 'إلغاء البيع',

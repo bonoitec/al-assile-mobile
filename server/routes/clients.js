@@ -340,18 +340,25 @@ router.post('/:id/funding', (req, res) => {
 /**
  * POST /api/clients/:id/repair-balance
  *
- * Recomputes the client's balance from transaction history and sets
- * `clients.balance` accordingly. Used by the audit UI's "Fix" button.
- * Writes a sync_log entry so the desktop sees the correction.
+ * Admin-only. Recomputes the client's balance from transaction history and
+ * sets `clients.balance` accordingly. Writes a zero-amount audit row to
+ * `client_payments` with method='balance_correction' so the correction is
+ * traceable: "corrected from X to Y by <user> on <date>". The audit row
+ * itself carries amount=0 so it does NOT affect the ledger math; only the
+ * UPDATE applies the fix.
  */
 router.post('/:id/repair-balance', (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Only admins can repair balances' });
+  }
+
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id) || id < 1) {
     return res.status(400).json({ success: false, error: 'Invalid client id' });
   }
 
   try {
-    const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(id);
+    const client = db.prepare('SELECT id, balance FROM clients WHERE id = ?').get(id);
     if (!client) return res.status(404).json({ success: false, error: 'Client not found' });
 
     const sumPayments = db.prepare(
@@ -362,18 +369,33 @@ router.post('/:id/repair-balance', (req, res) => {
         WHERE client_id = ? AND status NOT IN ('paid','cancelled')`
     ).get(id).s;
     const expected = Math.round((sumPayments - sumOutstanding) * 100) / 100;
+    const oldBalance = Math.round(client.balance * 100) / 100;
 
     db.transaction(() => {
+      // Audit row — zero amount so the ledger stays consistent after the fix.
+      // The note captures WHO did it, WHEN, and the before/after values.
+      const payRes = db.prepare(`
+        INSERT INTO client_payments
+          (client_id, sale_id, amount, date, method, notes, batch_id, created_by)
+        VALUES (?, NULL, 0, ?, 'balance_correction', ?, ?, ?)
+      `).run(
+        id,
+        new Date().toISOString().slice(0, 10),
+        `Balance corrected from ${oldBalance.toFixed(2)} to ${expected.toFixed(2)}`,
+        `repair-${id}-${Date.now()}`,
+        req.user.userId || null
+      );
       db.prepare('UPDATE clients SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(expected, id);
-      // Re-emit the client 'create' (acts as an upsert signal) so desktop's
-      // next pull re-imports and the balance correction propagates. Same
-      // pattern as update events on payments.
+      // Sync log: one for the audit-row payment, one for the client update
+      // (both picked up by the desktop pull in the same cycle).
+      db.prepare(`INSERT INTO sync_log (entity_type, entity_id, action, synced) VALUES ('payment', ?, 'create', 0)`)
+        .run(payRes.lastInsertRowid);
       db.prepare(`INSERT INTO sync_log (entity_type, entity_id, action, synced) VALUES ('client', ?, 'update', 0)`)
         .run(id);
     })();
 
-    return res.json({ success: true, data: { id, balance: expected } });
+    return res.json({ success: true, data: { id, old_balance: oldBalance, balance: expected } });
   } catch (err) {
     console.error('[clients] POST /:id/repair-balance error:', err.message);
     return res.status(500).json({ success: false, error: 'Repair failed' });
