@@ -247,6 +247,12 @@ const initDatabase = (db) => {
     if (!cols.includes('last_contact_at')) {
       db.exec('ALTER TABLE clients ADD COLUMN last_contact_at DATETIME');
     }
+    // remote_id = mobile's own row id, but also set on desktop-pushed clients
+    // to point back to themselves. Lets both sides translate references.
+    if (!cols.includes('remote_id')) {
+      db.exec('ALTER TABLE clients ADD COLUMN remote_id TEXT');
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_remote_id ON clients(remote_id) WHERE remote_id IS NOT NULL');
+    }
   } catch (e) {
     console.log('[schema] clients columns migration:', e.message);
   }

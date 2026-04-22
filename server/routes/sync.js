@@ -129,18 +129,48 @@ router.post('/push', (req, res) => {
       deductQty.run(qty, parseInt(productId, 10));
     }
 
-    // 4. Replace clients. credit_blocked and last_contact fields mirror the
-    //    desktop schema; the desktop is source of truth so we trust whatever
-    //    comes in. Missing fields (older desktop build) default safely.
-    db.prepare('DELETE FROM clients').run();
+    // 4. Reconcile clients. Previously this was DELETE + re-INSERT, which
+    //    wiped mobile-originated clients (those have sync_log entries and
+    //    need to survive until the desktop pulls them). New strategy:
+    //      a) Preserve mobile clients that haven't been pulled yet
+    //         (their sync_log entry is still synced=0).
+    //      b) Wipe the rest and re-insert from the desktop payload.
+    //    Mobile-created clients carry remote_id = their own mobile id; the
+    //    desktop assigns them a local id after pulling. Once the desktop
+    //    pushes again, the mobile client's remote_id matches so we preserve.
+    const pendingClientIds = new Set(
+      db.prepare(`SELECT DISTINCT entity_id FROM sync_log
+                  WHERE entity_type='client' AND synced=0`).all().map(r => r.entity_id)
+    );
+
+    // Snapshot (old_id → remote_id) BEFORE the wipe so we can remap mobile
+    // sales after the reinsert. This handles the case where the desktop has
+    // re-assigned a mobile-originated client a new local id: mobile.sale
+    // pointed at old id=5, desktop pushes id=7 with remote_id='5', we need
+    // to update sales.client_id from 5 → 7 after the new client lands.
+    const oldClientsById = new Map(
+      db.prepare('SELECT id, remote_id FROM clients WHERE remote_id IS NOT NULL').all()
+        .map(r => [r.id, r.remote_id])
+    );
+
+    if (pendingClientIds.size > 0) {
+      const ph = [...pendingClientIds].map(() => '?').join(',');
+      db.prepare(`DELETE FROM clients WHERE id NOT IN (${ph})`).run(...pendingClientIds);
+    } else {
+      db.prepare('DELETE FROM clients').run();
+    }
     const insertClient = db.prepare(`
-      INSERT INTO clients
+      INSERT OR REPLACE INTO clients
         (id, name, phone, address, email, notes, balance,
-         credit_blocked, last_contact_note, last_contact_at,
+         credit_blocked, last_contact_note, last_contact_at, remote_id,
          created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const c of clients) {
+      // Skip incoming rows that would collide with a pending mobile-created
+      // one (ID clash: desktop assigned the same id before pulling). The
+      // desktop re-syncs them in a later push once it knows the mapping.
+      if (pendingClientIds.has(c.id)) continue;
       insertClient.run(
         c.id,
         c.name,
@@ -152,9 +182,28 @@ router.post('/push', (req, res) => {
         c.credit_blocked ? 1 : 0,
         c.last_contact_note || null,
         c.last_contact_at   || null,
+        c.remote_id         || null,
         c.created_at        || new Date().toISOString(),
         c.updated_at        || new Date().toISOString()
       );
+    }
+
+    // 4b. Remap any mobile sales / payments that referenced old client ids
+    //     via remote_id. E.g. mobile originally had client id=5 (mobile-origin,
+    //     remote_id='5'). Desktop pulled it and re-keyed it to local id=7,
+    //     then pushed back with id=7 remote_id='5'. Mobile sales still have
+    //     client_id=5 — rewrite them to point at the new id (7).
+    if (oldClientsById.size > 0) {
+      const remapSale = db.prepare('UPDATE sales SET client_id = ? WHERE client_id = ?');
+      const remapPayment = db.prepare('UPDATE client_payments SET client_id = ? WHERE client_id = ?');
+      const findByRemote = db.prepare('SELECT id FROM clients WHERE remote_id = ?');
+      for (const [oldId, remoteId] of oldClientsById.entries()) {
+        const fresh = findByRemote.get(remoteId);
+        if (fresh && fresh.id !== oldId) {
+          remapSale.run(fresh.id, oldId);
+          remapPayment.run(fresh.id, oldId);
+        }
+      }
     }
 
     // 5. Replace users - passwords arrive already hashed from the desktop
@@ -376,12 +425,46 @@ router.get('/pull', (req, res) => {
       db.prepare(`UPDATE sync_log SET synced = 1 WHERE id IN (${phLog})`).run(...allLogIds);
     }
 
-    return { sales: salesOut, payments: paymentsOut };
+    // ------------------------- CLIENTS -------------------------
+    // Mirror the sales/payments pattern. Only mobile-originated clients are
+    // logged here (the sync/push ingest does NOT write sync_log — those
+    // clients came from desktop, no need to send them back).
+    const clientLogRows = since
+      ? db.prepare(`SELECT entity_id AS client_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'client' AND datetime(created_at) > datetime(?)
+                    ORDER BY id ASC`).all(since)
+      : db.prepare(`SELECT entity_id AS client_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'client' AND synced = 0
+                    ORDER BY id ASC`).all();
+
+    const latestClientAction = new Map();
+    const clientLogIds = [];
+    for (const r of clientLogRows) {
+      latestClientAction.set(r.client_id, r.action);
+      clientLogIds.push(r.log_id);
+    }
+    const clientIds = [...latestClientAction.keys()];
+    let clientsOut = [];
+    if (clientIds.length > 0) {
+      const ph = clientIds.map(() => '?').join(',');
+      const rows = db.prepare(`SELECT * FROM clients WHERE id IN (${ph})`).all(...clientIds);
+      const byId = new Map(rows.map(r => [r.id, r]));
+      for (const cid of clientIds) {
+        const row = byId.get(cid);
+        if (row) clientsOut.push({ ...row, __action: latestClientAction.get(cid) || 'create' });
+      }
+      if (clientLogIds.length > 0) {
+        const phLog = clientLogIds.map(() => '?').join(',');
+        db.prepare(`UPDATE sync_log SET synced = 1 WHERE id IN (${phLog})`).run(...clientLogIds);
+      }
+    }
+
+    return { sales: salesOut, payments: paymentsOut, clients: clientsOut };
   });
 
   try {
     const out = pull();
-    return res.json({ success: true, sales: out.sales, payments: out.payments });
+    return res.json({ success: true, sales: out.sales, payments: out.payments, clients: out.clients });
   } catch (err) {
     console.error('[sync] GET /pull error:', err.message);
     return res.status(500).json({ success: false, error: 'Sync pull failed' });

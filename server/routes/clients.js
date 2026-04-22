@@ -121,18 +121,32 @@ router.post('/', (req, res) => {
   }
 
   try {
-    const result = db.prepare(`
-      INSERT INTO clients (name, phone, address, email, notes, balance)
-      VALUES (?, ?, ?, ?, ?, 0)
-    `).run(
-      name.trim(),
-      phone || null,
-      address || null,
-      email || null,
-      notes || null
-    );
+    const txn = db.transaction(() => {
+      const result = db.prepare(`
+        INSERT INTO clients (name, phone, address, email, notes, balance)
+        VALUES (?, ?, ?, ?, ?, 0)
+      `).run(
+        name.trim(),
+        phone || null,
+        address || null,
+        email || null,
+        notes || null
+      );
+      const newId = result.lastInsertRowid;
+      // Stamp remote_id = our own id so the desktop pull can dedupe on it
+      // (and ignore it if desktop's own push later sends this same row back).
+      db.prepare('UPDATE clients SET remote_id = ? WHERE id = ?').run(String(newId), newId);
+      // Log the new client for the next desktop pull. Same pattern as sales
+      // and payments — the pull returns rows by sync_log.created_at watermark.
+      db.prepare(`
+        INSERT INTO sync_log (entity_type, entity_id, action, synced)
+        VALUES ('client', ?, 'create', 0)
+      `).run(newId);
+      return newId;
+    });
+    const newId = txn();
 
-    const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(result.lastInsertRowid);
+    const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(newId);
     return res.status(201).json({ success: true, data: client });
   } catch (err) {
     console.error('[clients] POST / error:', err.message);
