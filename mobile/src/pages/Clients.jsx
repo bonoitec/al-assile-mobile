@@ -1162,7 +1162,12 @@ function AddClientSheet({ onClose, onCreated }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const canSubmit = name.trim().length > 0 && !submitting;
+  // Submit blocked when: no name, or submitting, or a sign is selected but
+  // the amount is blank/zero (avoid silent "no opening entry" surprise).
+  const parsedAmount = parseFloat(balanceAmount);
+  const needsAmount = balanceSign !== 'none';
+  const amountValid = !needsAmount || (Number.isFinite(parsedAmount) && parsedAmount > 0);
+  const canSubmit = name.trim().length > 0 && !submitting && amountValid;
 
   const computeInitialBalance = () => {
     if (balanceSign === 'none') return 0;
