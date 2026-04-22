@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, X, Users, User, Phone, RefreshCw, ChevronRight,
-  Wallet, History, Trash2, Edit2, AlertTriangle, UserPlus, Loader2,
+  Wallet, History, Trash2, Edit2, AlertTriangle, UserPlus, Loader2, PlusCircle,
 } from 'lucide-react';
 import { useApi } from '../hooks/useApi.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -321,6 +321,7 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showVersement, setShowVersement] = useState(false);
+  const [showFunding, setShowFunding] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
 
   const reload = useCallback(async () => {
@@ -486,18 +487,32 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
               {t('sendWhatsAppReminder')}
             </button>
           ) : null}
-          <button
-            onClick={() => setShowVersement(true)}
-            disabled={!client}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-white text-base touch-manipulation"
-            style={{
-              background: 'linear-gradient(135deg, #065f46 0%, #10b981 100%)',
-              border: '1px solid rgba(16,185,129,0.3)',
-            }}
-          >
-            <Wallet size={18} />
-            {t('recordPayment')}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowVersement(true)}
+              disabled={!client}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-white text-base touch-manipulation"
+              style={{
+                background: 'linear-gradient(135deg, #065f46 0%, #10b981 100%)',
+                border: '1px solid rgba(16,185,129,0.3)',
+              }}
+            >
+              <Wallet size={18} />
+              {t('recordPayment')}
+            </button>
+            <button
+              onClick={() => setShowFunding(true)}
+              disabled={!client}
+              className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl font-bold text-white text-base touch-manipulation"
+              style={{
+                background: 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)',
+                border: '1px solid rgba(37,99,235,0.4)',
+              }}
+            >
+              <PlusCircle size={18} />
+              {t('addFunding')}
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -509,6 +524,21 @@ function ClientDetailSheet({ clientId, onClose, onChanged, isAdmin }) {
             onClose={() => setShowVersement(false)}
             onDone={async () => {
               setShowVersement(false);
+              await reload();
+              onChanged();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Funding sheet */}
+      <AnimatePresence>
+        {showFunding && client && (
+          <FundingSheet
+            client={client}
+            onClose={() => setShowFunding(false)}
+            onDone={async () => {
+              setShowFunding(false);
               await reload();
               onChanged();
             }}
@@ -1126,6 +1156,7 @@ function AddClientSheet({ onClose, onCreated }) {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [openingBalance, setOpeningBalance] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -1141,6 +1172,7 @@ function AddClientSheet({ onClose, onCreated }) {
         phone: phone.trim() || null,
         address: address.trim() || null,
         notes: notes.trim() || null,
+        initial_balance: parseFloat(openingBalance) || 0,
       });
       const created = res?.data || res;
       onCreated(created);
@@ -1245,6 +1277,19 @@ function AddClientSheet({ onClose, onCreated }) {
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
             />
           </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>{t('openingBalance')}</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={openingBalance}
+              onChange={e => setOpeningBalance(e.target.value)}
+              placeholder="0"
+              className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
+            />
+            <p className="text-[11px] mt-1.5" style={{ color: '#4a5568' }}>{t('openingBalanceHelp')}</p>
+          </div>
           {error ? <p className="text-xs text-center" style={{ color: '#f87171' }}>{error}</p> : null}
         </div>
         <div
@@ -1265,6 +1310,180 @@ function AddClientSheet({ onClose, onCreated }) {
           >
             {submitting ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
             {t('addClient')}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ======================================================================
+// Funding sheet — add credit/top-up directly to client balance
+// ======================================================================
+function FundingSheet({ client, onClose, onDone }) {
+  const api = useApi();
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const numeric = parseFloat((amount || '').replace(',', '.')) || 0;
+
+  const submit = async () => {
+    if (numeric <= 0) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await api.post(`/api/clients/${client.id}/funding`, {
+        amount: numeric,
+        notes: notes.trim() || null,
+      });
+      onDone();
+    } catch (err) {
+      setError(err.message || t('failedToRecordPayment'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-[60]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <div
+        className="absolute inset-0 backdrop-blur-sm"
+        style={{ background: 'rgba(0,0,0,0.75)' }}
+        onClick={submitting ? undefined : onClose}
+      />
+      <motion.div
+        className="absolute inset-x-0 bottom-0 rounded-t-3xl flex flex-col"
+        style={{
+          background: '#0d1120',
+          border: '1px solid rgba(37,99,235,0.25)',
+          maxHeight: '85vh',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+      >
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
+        </div>
+
+        <div className="flex items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(37,99,235,0.15)' }}
+            >
+              <PlusCircle size={16} style={{ color: '#60a5fa' }} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">{t('addFunding')}</h2>
+              <p className="text-xs" style={{ color: '#6b7280' }}>{client.name}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="w-9 h-9 flex items-center justify-center rounded-full"
+            style={{ background: 'rgba(255,255,255,0.06)', opacity: submitting ? 0.4 : 1 }}
+          >
+            <X size={18} style={{ color: '#9ca3af' }} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto scroll-touch px-5 pb-3 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>
+              {t('fundingAmount')} <span style={{ color: '#f87171' }}>*</span>
+            </label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder="0"
+              autoFocus
+              className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none text-right font-bold"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(37,99,235,0.25)',
+                fontSize: '20px',
+              }}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>
+              {t('notesOptional')}
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder={t('notesOptional')}
+              className="w-full px-4 py-2.5 rounded-xl text-white placeholder-gray-600 outline-none"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                fontSize: '15px',
+              }}
+            />
+          </div>
+
+          {numeric > 0 && (
+            <div
+              className="rounded-xl p-3 text-sm"
+              style={{
+                background: 'rgba(37,99,235,0.07)',
+                border: '1px solid rgba(37,99,235,0.18)',
+                color: '#60a5fa',
+              }}
+            >
+              ✓ {formatCurrency(numeric)} {t('addFunding').toLowerCase()}
+            </div>
+          )}
+
+          {error && (
+            <div
+              className="rounded-xl p-3 flex items-start gap-2"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}
+            >
+              <AlertTriangle size={16} style={{ color: '#f87171' }} className="flex-shrink-0 mt-0.5" />
+              <p className="text-xs" style={{ color: '#f87171' }}>{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 flex gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="flex-1 py-3 rounded-2xl text-sm font-semibold"
+            style={{ background: 'rgba(255,255,255,0.04)', color: '#9ca3af' }}
+          >
+            {t('cancel')}
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting || numeric <= 0}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-white text-sm touch-manipulation"
+            style={{
+              background: numeric > 0 && !submitting
+                ? 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)'
+                : 'rgba(255,255,255,0.04)',
+              border: numeric > 0 && !submitting ? '1px solid rgba(37,99,235,0.4)' : '1px solid rgba(255,255,255,0.06)',
+              opacity: numeric > 0 && !submitting ? 1 : 0.4,
+            }}
+          >
+            <PlusCircle size={16} />
+            {submitting ? t('processing') : t('addFunding')}
           </button>
         </div>
       </motion.div>

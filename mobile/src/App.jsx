@@ -7,6 +7,7 @@ import Products from './pages/Products.jsx';
 import Cart from './pages/Cart.jsx';
 import Sales from './pages/Sales.jsx';
 import Clients from './pages/Clients.jsx';
+import Reports from './pages/Reports.jsx';
 import BottomNav from './components/BottomNav.jsx';
 
 function ProtectedRoute({ children }) {
@@ -59,6 +60,14 @@ function AppLayout() {
             element={
               <ProtectedRoute>
                 <Clients />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <Reports />
               </ProtectedRoute>
             }
           />
