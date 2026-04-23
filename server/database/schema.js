@@ -302,6 +302,34 @@ const initDatabase = (db) => {
   db.exec('CREATE INDEX IF NOT EXISTS idx_sp_purchase ON supplier_payments(purchase_id)');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sp_remote ON supplier_payments(remote_id) WHERE remote_id IS NOT NULL');
 
+  // Migration: add remote_id to sales for desktop-origin sales import.
+  // Desktop now pushes its own sales so mobile Reports reflects the whole shop,
+  // not just field sales. remote_id='desktop-{id}' on desktop-origin rows; NULL
+  // on mobile-origin rows (they keep their own id as the stable identifier that
+  // desktop stores in its own sales.remote_id).
+  try {
+    const cols = db.prepare("PRAGMA table_info(sales)").all().map(c => c.name);
+    if (!cols.includes('remote_id')) {
+      db.exec('ALTER TABLE sales ADD COLUMN remote_id TEXT');
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_remote_id ON sales(remote_id) WHERE remote_id IS NOT NULL');
+    }
+  } catch (e) {
+    console.log('[schema] sales.remote_id migration:', e.message);
+  }
+
+  // Migration: add remote_id to client_payments. Same dedup strategy as sales.
+  // Desktop pushes its ledger here so mobile's client detail page shows a
+  // full payment history for counter transactions, not just mobile versements.
+  try {
+    const cols = db.prepare("PRAGMA table_info(client_payments)").all().map(c => c.name);
+    if (!cols.includes('remote_id')) {
+      db.exec('ALTER TABLE client_payments ADD COLUMN remote_id TEXT');
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_cp_remote_id ON client_payments(remote_id) WHERE remote_id IS NOT NULL');
+    }
+  } catch (e) {
+    console.log('[schema] client_payments.remote_id migration:', e.message);
+  }
+
   console.log('[schema] Database initialized successfully');
 };
 

@@ -231,6 +231,10 @@ router.get('/', (req, res) => {
   }
 
   try {
+    // Exclude desktop-origin sales from the Sales page — salespeople only see
+    // their own sales here. Desktop sales are included in Reports aggregates
+    // and pulled by the desktop through /api/sync/pull; they have no edit
+    // path on mobile and would just be confusing noise in this list.
     const sales = db.prepare(`
       SELECT
         s.*,
@@ -240,6 +244,7 @@ router.get('/', (req, res) => {
       FROM sales s
       LEFT JOIN clients c ON s.client_id = c.id
       WHERE s.date = ?
+        AND (s.remote_id IS NULL OR s.remote_id NOT LIKE 'desktop-%')
       ORDER BY s.created_at DESC
     `).all(date);
 
@@ -310,6 +315,13 @@ router.get('/:id', (req, res) => {
  * post-sale success screen. For accounting-correct partial corrections
  * after the fact, use POST /:id/return which issues a return ticket.
  */
+// Guard against mutating desktop-origin sales from mobile. These are read-only
+// mirrors pushed here for Reports visibility. Changes won't flow back to the
+// desktop cleanly — desktop's next push would just overwrite any local change.
+function isDesktopOrigin(sale) {
+  return sale && typeof sale.remote_id === 'string' && sale.remote_id.startsWith('desktop-');
+}
+
 router.delete('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id) || id < 1) {
@@ -320,6 +332,7 @@ router.delete('/:id', (req, res) => {
     const result = db.transaction(() => {
       const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
       if (!sale) throw new Error('SALE_NOT_FOUND');
+      if (isDesktopOrigin(sale)) throw new Error('DESKTOP_SALE_READONLY');
 
       // 1. Restore product stock from each line item
       const items = db.prepare('SELECT product_id, quantity FROM sale_items WHERE sale_id = ?').all(id);
@@ -368,6 +381,9 @@ router.delete('/:id', (req, res) => {
     if (err.message === 'SALE_NOT_FOUND') {
       return res.status(404).json({ success: false, error: 'Sale not found' });
     }
+    if (err.message === 'DESKTOP_SALE_READONLY') {
+      return res.status(403).json({ success: false, error: 'Desktop sales cannot be cancelled from the mobile app' });
+    }
     console.error('[sales] DELETE /:id error:', err.message);
     return res.status(500).json({ success: false, error: 'Failed to cancel sale' });
   }
@@ -397,6 +413,7 @@ router.post('/:id/payment', (req, res) => {
   const addPayment = db.transaction(() => {
     const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
     if (!sale) throw new Error('Sale not found');
+    if (isDesktopOrigin(sale)) throw new Error('DESKTOP_SALE_READONLY');
 
     const newPaid = Math.min((sale.paid_amount || 0) + amount, sale.total);
     const status = newPaid >= sale.total ? 'paid' : newPaid > 0 ? 'partial' : 'pending';
@@ -428,6 +445,12 @@ router.post('/:id/payment', (req, res) => {
     const updated = addPayment();
     return res.json({ success: true, data: updated });
   } catch (err) {
+    if (err.message === 'DESKTOP_SALE_READONLY') {
+      return res.status(403).json({
+        success: false,
+        error: 'Desktop sales cannot accept payments from the mobile app'
+      });
+    }
     console.error('[sales] POST /:id/payment error:', err.message);
     return res.status(err.message === 'Sale not found' ? 404 : 500).json({
       success: false, error: err.message
@@ -479,6 +502,7 @@ router.post('/:id/return', (req, res) => {
     // 1. Fetch the original sale
     const originalSale = db.prepare('SELECT * FROM sales WHERE id = ?').get(saleId);
     if (!originalSale) throw new Error('Sale not found');
+    if (isDesktopOrigin(originalSale)) throw new Error('DESKTOP_SALE_READONLY');
 
     // 2. Fetch the original sale items for validation
     const originalItems = db.prepare('SELECT * FROM sale_items WHERE sale_id = ?').all(saleId);
@@ -610,6 +634,12 @@ router.post('/:id/return', (req, res) => {
     const result = processReturn();
     return res.status(201).json({ success: true, data: result });
   } catch (err) {
+    if (err.message === 'DESKTOP_SALE_READONLY') {
+      return res.status(403).json({
+        success: false,
+        error: 'Desktop sales cannot be returned from the mobile app'
+      });
+    }
     console.error('[sales] POST /:id/return error:', err.message);
     let httpStatus = 500;
     if (err.message === 'Sale not found')               httpStatus = 404;

@@ -1,10 +1,37 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Printer, CheckCircle2, RefreshCw, AlertTriangle, Loader2, X } from 'lucide-react';
+import {
+  Printer, CheckCircle2, RefreshCw, AlertTriangle, Loader2, X,
+  TrendingUp, Package, Truck, ShoppingCart, DollarSign, Receipt,
+} from 'lucide-react';
 import { useApi } from '../hooks/useApi.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { formatCurrency } from '../utils/currency.js';
 import { t } from '../utils/i18n.js';
+
+// Small helper: YYYY-MM-DD in local time (not UTC). Used for date ranges.
+function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+function rangeFor(preset) {
+  const today = new Date();
+  const end = isoDate(today);
+  if (preset === 'today') return { start: end, end };
+  if (preset === 'week') {
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - 6);
+    return { start: isoDate(weekStart), end };
+  }
+  if (preset === 'month') {
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start: isoDate(monthStart), end };
+  }
+  return { start: end, end };
+}
 
 // ======================================================================
 // Print styles — hidden on screen, clean table layout on paper
@@ -690,11 +717,318 @@ function AuditTab() {
 }
 
 // ======================================================================
+// Dashboard tab — date range + sales/items/collected/outstanding + top products
+// ======================================================================
+function StatCard({ icon: Icon, label, value, tint }) {
+  return (
+    <div
+      className="rounded-xl p-3.5"
+      style={{
+        background: `rgba(${tint},0.07)`,
+        border: `1px solid rgba(${tint},0.18)`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <Icon size={14} style={{ color: `rgb(${tint})` }} />
+        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: `rgb(${tint})` }}>
+          {label}
+        </p>
+      </div>
+      <p className="text-lg font-bold text-white leading-tight">{value}</p>
+    </div>
+  );
+}
+
+function DashboardTab() {
+  const api = useApi();
+  const [preset, setPreset] = useState('today');
+  const [range, setRange] = useState(() => rangeFor('today'));
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    // useApi unwraps the { success, data } envelope — res is the summary object.
+    api.get(`/api/reports/summary?start=${range.start}&end=${range.end}`)
+      .then(res => setData(res))
+      .catch(err => console.error('[reports] summary', err))
+      .finally(() => setLoading(false));
+  }, [range.start, range.end]);
+
+  const setPresetRange = (p) => {
+    setPreset(p);
+    setRange(rangeFor(p));
+  };
+
+  const maxRevenue = useMemo(() => {
+    const vals = (data?.daily || []).map(d => d.revenue || 0);
+    return vals.length ? Math.max(...vals, 1) : 1;
+  }, [data]);
+
+  return (
+    <div>
+      {/* Range presets */}
+      <div className="flex gap-2 mb-4 overflow-x-auto no-scrollbar">
+        {[
+          { id: 'today', label: t('rangeToday') },
+          { id: 'week',  label: t('rangeWeek') },
+          { id: 'month', label: t('rangeMonth') },
+        ].map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setPresetRange(id)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap touch-manipulation"
+            style={{
+              background: preset === id ? 'rgba(212,165,116,0.15)' : 'rgba(255,255,255,0.04)',
+              border:     preset === id ? '1px solid rgba(212,165,116,0.35)' : '1px solid rgba(255,255,255,0.06)',
+              color:      preset === id ? '#D4A574' : '#9ca3af',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+        <div className="ml-auto flex items-center px-2 text-[10px]" style={{ color: '#6b7280' }}>
+          {range.start === range.end ? range.start : `${range.start} → ${range.end}`}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 size={28} className="animate-spin" style={{ color: '#D4A574' }} />
+        </div>
+      ) : !data ? (
+        <div className="text-center py-12">
+          <p style={{ color: '#6b7280' }}>{t('noSalesInRange')}</p>
+        </div>
+      ) : (
+        <>
+          {/* Top-line cards */}
+          <div className="grid grid-cols-2 gap-2.5 mb-4">
+            <StatCard icon={TrendingUp} label={t('netSales')}    value={formatCurrency(data.net_sales)}    tint="52,211,153" />
+            <StatCard icon={Receipt}    label={t('salesCount')}  value={data.sales_count}                  tint="212,165,116" />
+            <StatCard icon={DollarSign} label={t('collected')}   value={formatCurrency(data.total_collected)} tint="96,165,250" />
+            <StatCard icon={AlertTriangle} label={t('outstanding')} value={formatCurrency(data.outstanding)} tint="248,113,113" />
+            <StatCard icon={Package}    label={t('unitsSold')}   value={data.items_sold}                   tint="244,114,182" />
+            <StatCard icon={ShoppingCart} label={t('returnsTotal')} value={formatCurrency(data.returns_total)} tint="156,163,175" />
+          </div>
+
+          {/* Daily revenue bars */}
+          {data.daily && data.daily.length > 1 && (
+            <div
+              className="rounded-xl p-3 mb-4"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: '#9ca3af' }}>
+                {t('salesperDay')}
+              </p>
+              <div className="flex items-end gap-1 h-24">
+                {data.daily.map((d) => (
+                  <div key={d.date} className="flex-1 flex flex-col items-center justify-end gap-1" title={`${d.date}: ${formatCurrency(d.revenue)}`}>
+                    <div
+                      className="w-full rounded-t"
+                      style={{
+                        height: `${Math.max(3, (d.revenue / maxRevenue) * 100)}%`,
+                        background: 'linear-gradient(to top, rgba(212,165,116,0.45), rgba(212,165,116,0.85))',
+                      }}
+                    />
+                    <span className="text-[9px]" style={{ color: '#4a5568' }}>
+                      {d.date.slice(5)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top products */}
+          {data.top_products && data.top_products.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: '#9ca3af' }}>
+                {t('topProducts')}
+              </p>
+              <div className="space-y-1.5">
+                {data.top_products.map((p, i) => (
+                  <div
+                    key={`${p.name}-${i}`}
+                    className="flex items-center justify-between p-2.5 rounded-lg"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[10px] font-bold w-5 text-center" style={{ color: '#D4A574' }}>{i + 1}</span>
+                      <p className="text-sm text-white truncate">{p.name}</p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-[10px]" style={{ color: '#6b7280' }}>×{p.quantity}</span>
+                      <span className="text-sm font-semibold" style={{ color: '#D4A574' }}>
+                        {formatCurrency(p.revenue)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {data.sales_count === 0 && (
+            <div className="text-center py-8">
+              <p style={{ color: '#6b7280' }}>{t('noSalesInRange')}</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ======================================================================
+// Stock Alerts tab — products at or below minimum stock
+// ======================================================================
+function StockAlertsTab() {
+  const api = useApi();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    // useApi unwraps the envelope — res is the array itself.
+    api.get('/api/reports/stock-alerts')
+      .then(res => setRows(Array.isArray(res) ? res : []))
+      .catch(err => console.error('[reports] stock-alerts', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 size={28} className="animate-spin" style={{ color: '#D4A574' }} />
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <CheckCircle2 size={48} className="mx-auto mb-3" style={{ color: '#34d399' }} />
+        <p style={{ color: '#34d399' }}>{t('noStockAlerts')}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {rows.map(p => {
+        const isOut = (p.quantity || 0) <= 0;
+        const tint = isOut ? '239,68,68' : '251,146,60';
+        return (
+          <div
+            key={p.id}
+            className="flex items-center justify-between p-3.5 rounded-xl"
+            style={{
+              background: `rgba(${tint},0.06)`,
+              border: `1px solid rgba(${tint},0.14)`,
+            }}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-white truncate">{p.name}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: '#6b7280' }}>
+                {t('minStockAlert')}: {p.min_stock_alert || 0} {p.unit || ''}
+              </p>
+            </div>
+            <div className="text-right flex-shrink-0 ml-3">
+              <p className="text-[10px] font-semibold uppercase" style={{ color: `rgb(${tint})` }}>
+                {isOut ? t('outOfStock') : t('low')}
+              </p>
+              <p className="text-base font-bold" style={{ color: `rgb(${tint})` }}>
+                {p.quantity || 0} {p.unit || ''}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ======================================================================
+// Payables tab — suppliers the shop owes
+// ======================================================================
+function PayablesTab() {
+  const api = useApi();
+  const [data, setData] = useState({ suppliers: [], total_owed: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    // useApi unwraps the envelope — res is the { suppliers, total_owed } object.
+    api.get('/api/reports/payables')
+      .then(res => setData(res || { suppliers: [], total_owed: 0 }))
+      .catch(err => console.error('[reports] payables', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 size={28} className="animate-spin" style={{ color: '#D4A574' }} />
+      </div>
+    );
+  }
+
+  const list = data.suppliers || [];
+
+  return (
+    <div>
+      <div
+        className="rounded-xl px-4 py-3 mb-4"
+        style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)' }}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#f87171' }}>
+          {t('shopOwesSuppliers')}
+        </p>
+        <p className="text-xl font-bold mt-0.5" style={{ color: '#f87171' }}>
+          {formatCurrency(data.total_owed || 0)}
+        </p>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="text-center py-12">
+          <CheckCircle2 size={48} className="mx-auto mb-3" style={{ color: '#34d399' }} />
+          <p style={{ color: '#34d399' }}>{t('noPayables')}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {list.map(s => (
+            <div
+              key={s.id}
+              className="flex items-center justify-between p-3.5 rounded-xl"
+              style={{
+                background: 'rgba(239,68,68,0.06)',
+                border: '1px solid rgba(239,68,68,0.12)',
+              }}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white truncate">{s.name}</p>
+                {s.phone && (
+                  <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>{s.phone}</p>
+                )}
+              </div>
+              <p className="text-base font-bold flex-shrink-0 ml-3" style={{ color: '#f87171' }}>
+                {formatCurrency(Math.abs(s.balance || 0))}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ======================================================================
 // Reports page
 // ======================================================================
 export default function Reports() {
   const api = useApi();
-  const [tab, setTab] = useState('receivables');
+  const [tab, setTab] = useState('dashboard');
   const [clients, setClients] = useState([]);
   const [loadingClients, setLoadingClients] = useState(true);
 
@@ -707,10 +1041,18 @@ export default function Reports() {
   }, []);
 
   const tabs = [
+    { id: 'dashboard',    label: t('dashboard') },
+    { id: 'stockAlerts',  label: t('stockAlerts') },
     { id: 'receivables',  label: t('receivablesReport') },
+    { id: 'payables',     label: t('payablesReport') },
     { id: 'allBalances',  label: t('allBalancesReport') },
     { id: 'audit',        label: t('balanceAudit') },
   ];
+
+  // Receivables/balances tabs depend on clients list — show a spinner only
+  // when they're the active tab and clients haven't loaded yet.
+  const needsClients = tab === 'receivables' || tab === 'allBalances';
+  const showClientsSpinner = needsClients && loadingClients;
 
   return (
     <div className="h-full flex flex-col safe-top" style={{ background: '#080c14' }}>
@@ -718,16 +1060,16 @@ export default function Reports() {
       <div className="flex-shrink-0 px-5 pt-4 pb-3">
         <h1 className="text-2xl font-bold text-white mb-4">{t('reports')}</h1>
 
-        {/* Tab bar */}
+        {/* Tab bar — scrollable since we have 6 tabs */}
         <div
-          className="flex rounded-xl p-1"
+          className="flex gap-1 rounded-xl p-1 overflow-x-auto no-scrollbar"
           style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
         >
           {tabs.map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all touch-manipulation"
+              className="flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all touch-manipulation whitespace-nowrap"
               style={{
                 background: tab === id ? 'rgba(212,165,116,0.15)' : 'transparent',
                 color:      tab === id ? '#D4A574' : '#4a5568',
@@ -742,15 +1084,18 @@ export default function Reports() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto scroll-touch px-5 pb-6">
-        {loadingClients && tab !== 'audit' ? (
+        {showClientsSpinner ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 size={28} className="animate-spin" style={{ color: '#D4A574' }} />
           </div>
         ) : (
           <>
-            {tab === 'receivables' && <ReceivablesTab clients={clients} />}
-            {tab === 'allBalances' && <AllBalancesTab clients={clients} />}
-            {tab === 'audit' && <AuditTab />}
+            {tab === 'dashboard'    && <DashboardTab />}
+            {tab === 'stockAlerts'  && <StockAlertsTab />}
+            {tab === 'receivables'  && <ReceivablesTab clients={clients} />}
+            {tab === 'payables'     && <PayablesTab />}
+            {tab === 'allBalances'  && <AllBalancesTab clients={clients} />}
+            {tab === 'audit'        && <AuditTab />}
           </>
         )}
       </div>

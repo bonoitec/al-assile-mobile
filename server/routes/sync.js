@@ -55,6 +55,9 @@ router.post('/push', (req, res) => {
     clients           = [],
     suppliers         = [],
     supplier_payments = [],
+    sales             = [],
+    sale_items        = [],
+    client_payments   = [],
     users             = [],
     settings          = []
   } = req.body;
@@ -62,10 +65,12 @@ router.post('/push', (req, res) => {
   // Basic shape validation - the desktop should always send arrays
   if (!Array.isArray(products) || !Array.isArray(clients) ||
       !Array.isArray(users)    || !Array.isArray(settings) ||
-      !Array.isArray(suppliers) || !Array.isArray(supplier_payments)) {
+      !Array.isArray(suppliers) || !Array.isArray(supplier_payments) ||
+      !Array.isArray(sales) || !Array.isArray(sale_items) ||
+      !Array.isArray(client_payments)) {
     return res.status(400).json({
       success: false,
-      error: 'products, clients, suppliers, supplier_payments, users, and settings must all be arrays'
+      error: 'all payload arrays required (products, clients, suppliers, supplier_payments, sales, sale_items, client_payments, users, settings)'
     });
   }
 
@@ -307,6 +312,125 @@ router.post('/push', (req, res) => {
       );
     }
 
+    // 4f. Reconcile desktop-origin sales. Mobile-origin sales (those created
+    //     via POST /api/sales) keep remote_id NULL and must NEVER be touched
+    //     here — they're the authoritative copy until desktop pulls them.
+    //     Desktop-origin sales carry remote_id='desktop-{id}' on mobile; we
+    //     wipe+reinsert that subset on each push so updated totals, status
+    //     changes, and deletions propagate cleanly.
+    const oldDesktopSaleIds = db.prepare(
+      `SELECT id FROM sales WHERE remote_id LIKE 'desktop-%'`
+    ).all().map(r => r.id);
+    if (oldDesktopSaleIds.length > 0) {
+      const ph = oldDesktopSaleIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM sale_items WHERE sale_id IN (${ph})`).run(...oldDesktopSaleIds);
+      db.prepare(`DELETE FROM sales WHERE id IN (${ph})`).run(...oldDesktopSaleIds);
+    }
+
+    // Build id sets once rather than querying per-row — N+1 perf trap with
+    // large sales histories (90d × 100/day = 9K sale_items).
+    const validClientIds = new Set(
+      db.prepare('SELECT id FROM clients').all().map(r => r.id)
+    );
+    const validProductIds = new Set(
+      db.prepare('SELECT id FROM products').all().map(r => r.id)
+    );
+
+    const insertSale = db.prepare(`
+      INSERT INTO sales
+        (client_id, date, subtotal, discount, total, paid_amount, status,
+         payment_method, notes, created_by, remote_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    // Map desktop sale id → mobile's freshly assigned local id so we can
+    // stitch sale_items to the correct parent row after insert.
+    const desktopSaleIdMap = new Map();
+    for (const s of sales) {
+      // Walk-in sales have client_id=NULL; only validate when non-null.
+      if (s.client_id != null && !validClientIds.has(s.client_id)) continue;
+      const info = insertSale.run(
+        s.client_id  || null,
+        s.date,
+        s.subtotal    || 0,
+        s.discount    || 0,
+        s.total       || 0,
+        s.paid_amount || 0,
+        s.status      || 'paid',
+        s.payment_method || 'cash',
+        s.notes       || null,
+        s.created_by  || null,
+        `desktop-${s.id}`,
+        s.created_at  || new Date().toISOString()
+      );
+      desktopSaleIdMap.set(s.id, info.lastInsertRowid);
+    }
+
+    const insertSaleItem = db.prepare(`
+      INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, total, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    let saleItemsImported = 0;
+    for (const it of sale_items) {
+      const newSaleId = desktopSaleIdMap.get(it.sale_id);
+      if (!newSaleId) continue; // orphan item whose parent sale was skipped
+      if (!validProductIds.has(it.product_id)) continue;
+      insertSaleItem.run(
+        newSaleId,
+        it.product_id,
+        it.quantity,
+        it.unit_price,
+        it.total,
+        it.created_at || new Date().toISOString()
+      );
+      saleItemsImported++;
+    }
+
+    // 4g. Reconcile desktop-origin client_payments. Same approach as sales:
+    //     wipe the remote_id LIKE 'desktop-%' subset, re-insert from payload,
+    //     remap sale_id via desktopSaleIdMap (desktop's sale id → mobile's
+    //     newly-assigned sale id). Mobile-origin payments (remote_id NULL)
+    //     stay untouched — they're pending pickup by desktop's next pull.
+    const oldDesktopPaymentIds = db.prepare(
+      `SELECT id FROM client_payments WHERE remote_id LIKE 'desktop-%'`
+    ).all().map(r => r.id);
+    if (oldDesktopPaymentIds.length > 0) {
+      const ph = oldDesktopPaymentIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM client_payments WHERE id IN (${ph})`).run(...oldDesktopPaymentIds);
+    }
+
+    const insertPayment = db.prepare(`
+      INSERT INTO client_payments
+        (client_id, sale_id, amount, date, method, notes, batch_id, created_by, remote_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    let clientPaymentsImported = 0;
+    for (const cp of client_payments) {
+      // Skip payments whose client wasn't inserted (pending collision).
+      if (!validClientIds.has(cp.client_id)) continue;
+      // Remap sale_id if this payment references a desktop-origin sale that
+      // just got a new mobile id. NULL sale_id = on-account credit, leave null.
+      let mobileSaleId = null;
+      if (cp.sale_id != null) {
+        mobileSaleId = desktopSaleIdMap.get(cp.sale_id) || null;
+        // If mapping missing, the sale might predate the 30-day window and
+        // not have been pushed. Drop the payment to avoid dangling ledger.
+        if (!mobileSaleId) continue;
+      }
+      insertPayment.run(
+        cp.client_id,
+        mobileSaleId,
+        cp.amount,
+        cp.date,
+        cp.method     || 'cash',
+        cp.notes      || null,
+        cp.batch_id   || null,
+        cp.created_by || null,
+        `desktop-${cp.id}`,
+        cp.created_at || new Date().toISOString()
+      );
+      clientPaymentsImported++;
+    }
+
     // 5. Replace users - passwords arrive already hashed from the desktop
     db.prepare('DELETE FROM users').run();
     const insertUser = db.prepare(`
@@ -345,6 +469,9 @@ router.post('/push', (req, res) => {
       clients:           clients.length,
       suppliers:         suppliers.length,
       supplier_payments: supplier_payments.length,
+      sales:             desktopSaleIdMap.size,
+      sale_items:        saleItemsImported,
+      client_payments:   clientPaymentsImported,
       users:             users.length,
       settings:          settings.length
     };
