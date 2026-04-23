@@ -351,6 +351,11 @@ const translations = {
 
     // Copyright
     copyright: 'Al Assile Mobile Sales',
+
+    // Misc labels
+    email: 'Email',
+    saleLabel: 'Sale',
+    failedToFixBalance: 'Failed to repair balance',
   },
 
   ar: {
@@ -702,14 +707,28 @@ const translations = {
 
     // Copyright
     copyright: 'الأصيل - المبيعات المتنقلة',
+
+    // Misc labels
+    email: 'البريد الإلكتروني',
+    saleLabel: 'بيع',
+    failedToFixBalance: 'فشل إصلاح الرصيد',
   }
 };
 
 let currentLang = localStorage.getItem('mobile_lang') || 'en';
 
+function applyLangToDocument(lang) {
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+}
+
+applyLangToDocument(currentLang);
+
 export function setLanguage(lang) {
   currentLang = lang;
   localStorage.setItem('mobile_lang', lang);
+  applyLangToDocument(lang);
 }
 
 export function getLanguage() {

@@ -514,7 +514,7 @@ function OverviewTab({ supplier, isAdmin, onDelete }) {
           )}
           {supplier.email && (
             <div>
-              <p className="text-[10px] uppercase tracking-wide" style={{ color: '#6b7280' }}>Email</p>
+              <p className="text-[10px] uppercase tracking-wide" style={{ color: '#6b7280' }}>{t('email')}</p>
               <p className="text-sm text-white">{supplier.email}</p>
             </div>
           )}

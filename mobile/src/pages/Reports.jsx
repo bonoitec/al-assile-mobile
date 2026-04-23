@@ -482,7 +482,7 @@ function AuditTab() {
       await fetchAudit();
     } catch (err) {
       setConfirmDrift(null);
-      alert(err.message || 'Failed to repair balance');
+      alert(err.message || t('failedToFixBalance'));
     } finally {
       setFixingId(null);
     }

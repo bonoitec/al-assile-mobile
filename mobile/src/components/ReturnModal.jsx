@@ -124,7 +124,7 @@ export default function ReturnModal({ sale, onConfirm, onClose }) {
               </div>
               <div>
                 <h2 className="text-base font-bold text-white">{t('returnSale')}</h2>
-                <p className="text-xs" style={{ color: '#4a5568' }}>Sale #{sale?.id}</p>
+                <p className="text-xs" style={{ color: '#4a5568' }}>{t('saleLabel')} #{sale?.id}</p>
               </div>
             </div>
             <button
