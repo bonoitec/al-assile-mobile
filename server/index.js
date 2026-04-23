@@ -23,6 +23,7 @@ const { authenticate } = require('./middleware/auth');
 const authRouter     = require('./routes/auth');
 const productsRouter = require('./routes/products');
 const clientsRouter  = require('./routes/clients');
+const suppliersRouter = require('./routes/suppliers');
 const salesRouter    = require('./routes/sales');
 const paymentsRouter = require('./routes/payments');
 const syncRouter     = require('./routes/sync');
@@ -78,6 +79,7 @@ app.use('/api/sync', syncRouter);
 // Mobile API - all routes below require a valid JWT
 app.use('/api/products', authenticate, productsRouter);
 app.use('/api/clients',  authenticate, clientsRouter);
+app.use('/api/suppliers', authenticate, suppliersRouter);
 app.use('/api/sales',    authenticate, salesRouter);
 app.use('/api/payments', authenticate, paymentsRouter);
 app.use('/api/settings', authenticate, settingsRouter);

@@ -51,18 +51,21 @@ router.use(requireSyncKey);
  */
 router.post('/push', (req, res) => {
   const {
-    products = [],
-    clients  = [],
-    users    = [],
-    settings = []
+    products          = [],
+    clients           = [],
+    suppliers         = [],
+    supplier_payments = [],
+    users             = [],
+    settings          = []
   } = req.body;
 
   // Basic shape validation - the desktop should always send arrays
   if (!Array.isArray(products) || !Array.isArray(clients) ||
-      !Array.isArray(users)    || !Array.isArray(settings)) {
+      !Array.isArray(users)    || !Array.isArray(settings) ||
+      !Array.isArray(suppliers) || !Array.isArray(supplier_payments)) {
     return res.status(400).json({
       success: false,
-      error: 'products, clients, users, and settings must all be arrays'
+      error: 'products, clients, suppliers, supplier_payments, users, and settings must all be arrays'
     });
   }
 
@@ -206,6 +209,104 @@ router.post('/push', (req, res) => {
       }
     }
 
+    // 4c. Reconcile suppliers. Mirror the clients strategy: preserve any
+    //     mobile-created supplier whose sync_log entry hasn't been consumed
+    //     by the desktop yet (synced=0), then wipe+reinsert the rest from
+    //     the desktop snapshot. Mobile-origin suppliers carry remote_id =
+    //     their own mobile id and get remapped once desktop assigns a local id.
+    const pendingSupplierIds = new Set(
+      db.prepare(`SELECT DISTINCT entity_id FROM sync_log
+                  WHERE entity_type='supplier' AND synced=0`).all().map(r => r.entity_id)
+    );
+    const oldSuppliersById = new Map(
+      db.prepare('SELECT id, remote_id FROM suppliers WHERE remote_id IS NOT NULL').all()
+        .map(r => [r.id, r.remote_id])
+    );
+
+    if (pendingSupplierIds.size > 0) {
+      const ph = [...pendingSupplierIds].map(() => '?').join(',');
+      db.prepare(`DELETE FROM suppliers WHERE id NOT IN (${ph})`).run(...pendingSupplierIds);
+    } else {
+      db.prepare('DELETE FROM suppliers').run();
+    }
+    const insertSupplier = db.prepare(`
+      INSERT OR REPLACE INTO suppliers
+        (id, name, phone, address, email, notes, balance, remote_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const s of suppliers) {
+      // Skip rows that would collide with a pending mobile-created one.
+      if (pendingSupplierIds.has(s.id)) continue;
+      insertSupplier.run(
+        s.id,
+        s.name,
+        s.phone      || null,
+        s.address    || null,
+        s.email      || null,
+        s.notes      || null,
+        s.balance    || 0,
+        s.remote_id  || null,
+        s.created_at || new Date().toISOString(),
+        s.updated_at || new Date().toISOString()
+      );
+    }
+
+    // 4d. Remap any mobile supplier_payments that referenced old supplier
+    //     ids via remote_id. Same rationale as the sales/payments remap above:
+    //     desktop may have re-keyed a mobile-origin supplier to a new local id
+    //     and pushed it back. Mobile rows still point at the old id.
+    if (oldSuppliersById.size > 0) {
+      const remapSP = db.prepare('UPDATE supplier_payments SET supplier_id = ? WHERE supplier_id = ?');
+      const findByRemote = db.prepare('SELECT id FROM suppliers WHERE remote_id = ?');
+      for (const [oldId, remoteId] of oldSuppliersById.entries()) {
+        const fresh = findByRemote.get(remoteId);
+        if (fresh && fresh.id !== oldId) {
+          remapSP.run(fresh.id, oldId);
+        }
+      }
+    }
+
+    // 4e. Reconcile supplier_payments. Same preserve-pending strategy as
+    //     clients/suppliers: mobile-created payments that haven't been pulled
+    //     up by desktop yet must survive the wipe.
+    const pendingSPIds = new Set(
+      db.prepare(`SELECT DISTINCT entity_id FROM sync_log
+                  WHERE entity_type='supplier_payment' AND synced=0`).all().map(r => r.entity_id)
+    );
+    if (pendingSPIds.size > 0) {
+      const ph = [...pendingSPIds].map(() => '?').join(',');
+      db.prepare(`DELETE FROM supplier_payments WHERE id NOT IN (${ph})`).run(...pendingSPIds);
+    } else {
+      db.prepare('DELETE FROM supplier_payments').run();
+    }
+    const insertSP = db.prepare(`
+      INSERT OR REPLACE INTO supplier_payments
+        (id, supplier_id, purchase_id, amount, date, method, notes,
+         batch_id, created_by, remote_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const sp of supplier_payments) {
+      if (pendingSPIds.has(sp.id)) continue;
+      // Guard: if the referenced supplier wasn't inserted (e.g. it was in the
+      // pending mobile set and we skipped the collision), drop this payment.
+      // Without FK on supplier_id we'd orphan it silently; explicit check.
+      const supExists = db.prepare('SELECT 1 FROM suppliers WHERE id = ?').get(sp.supplier_id);
+      if (!supExists) continue;
+      insertSP.run(
+        sp.id,
+        sp.supplier_id,
+        sp.purchase_id || null,
+        sp.amount,
+        sp.date,
+        sp.method      || 'cash',
+        sp.notes       || null,
+        sp.batch_id    || null,
+        sp.created_by  || null,
+        sp.remote_id   || null,
+        sp.created_at  || new Date().toISOString()
+      );
+    }
+
     // 5. Replace users - passwords arrive already hashed from the desktop
     db.prepare('DELETE FROM users').run();
     const insertUser = db.prepare(`
@@ -240,10 +341,12 @@ router.post('/push', (req, res) => {
     }
 
     return {
-      products: products.length,
-      clients:  clients.length,
-      users:    users.length,
-      settings: settings.length
+      products:          products.length,
+      clients:           clients.length,
+      suppliers:         suppliers.length,
+      supplier_payments: supplier_payments.length,
+      users:             users.length,
+      settings:          settings.length
     };
   });
 
@@ -459,12 +562,107 @@ router.get('/pull', (req, res) => {
       }
     }
 
-    return { sales: salesOut, payments: paymentsOut, clients: clientsOut };
+    // ------------------------- SUPPLIERS -------------------------
+    // Mirror the clients block exactly. Only mobile-originated suppliers are
+    // logged here; desktop-origin suppliers arrive via sync/push and do NOT
+    // write to sync_log (no need to bounce them back).
+    const supplierLogRows = since
+      ? db.prepare(`SELECT entity_id AS supplier_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'supplier' AND datetime(created_at) > datetime(?)
+                    ORDER BY id ASC`).all(since)
+      : db.prepare(`SELECT entity_id AS supplier_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'supplier' AND synced = 0
+                    ORDER BY id ASC`).all();
+
+    const latestSupplierAction = new Map();
+    const supplierLogIds = [];
+    for (const r of supplierLogRows) {
+      latestSupplierAction.set(r.supplier_id, r.action);
+      supplierLogIds.push(r.log_id);
+    }
+    const supplierIds = [...latestSupplierAction.keys()];
+    let suppliersOut = [];
+    if (supplierIds.length > 0) {
+      const ph = supplierIds.map(() => '?').join(',');
+      const rows = db.prepare(`SELECT * FROM suppliers WHERE id IN (${ph})`).all(...supplierIds);
+      const byId = new Map(rows.map(r => [r.id, r]));
+      for (const sid of supplierIds) {
+        const action = latestSupplierAction.get(sid);
+        const row = byId.get(sid);
+        if (action === 'delete') {
+          // Tombstone — desktop reverses its mirror via importRemoteSupplier.
+          suppliersOut.push({ id: sid, __action: 'delete' });
+        } else if (row) {
+          suppliersOut.push({ ...row, __action: action || 'create' });
+        }
+      }
+      if (supplierLogIds.length > 0) {
+        const phLog = supplierLogIds.map(() => '?').join(',');
+        db.prepare(`UPDATE sync_log SET synced = 1 WHERE id IN (${phLog})`).run(...supplierLogIds);
+      }
+    }
+
+    // ------------------------- SUPPLIER PAYMENTS -------------------------
+    // Same create/update/delete + latest-action-wins pattern as client_payments.
+    const spLogRows = since
+      ? db.prepare(`SELECT entity_id AS payment_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'supplier_payment' AND datetime(created_at) > datetime(?)
+                    ORDER BY id ASC`).all(since)
+      : db.prepare(`SELECT entity_id AS payment_id, action, id AS log_id FROM sync_log
+                    WHERE entity_type = 'supplier_payment' AND synced = 0
+                    ORDER BY id ASC`).all();
+
+    const latestSPAction = new Map();
+    const spLogIdsByPaymentId = new Map();
+    for (const row of spLogRows) {
+      latestSPAction.set(row.payment_id, row.action);
+      (spLogIdsByPaymentId.get(row.payment_id)
+        || spLogIdsByPaymentId.set(row.payment_id, []).get(row.payment_id)).push(row.log_id);
+    }
+
+    const spIds = [...latestSPAction.keys()];
+    let supplierPaymentsOut = [];
+    if (spIds.length > 0) {
+      const ph = spIds.map(() => '?').join(',');
+      const existingRows = db.prepare(`
+        SELECT * FROM supplier_payments WHERE id IN (${ph})
+      `).all(...spIds);
+      const existingById = new Map(existingRows.map(r => [r.id, r]));
+
+      for (const pid of spIds) {
+        const action = latestSPAction.get(pid);
+        const row = existingById.get(pid);
+        if (action === 'delete') {
+          supplierPaymentsOut.push({ id: pid, __action: 'delete' });
+        } else if (row) {
+          supplierPaymentsOut.push({ ...row, __action: action });
+        }
+      }
+
+      const allLogIds = [].concat(...spLogIdsByPaymentId.values());
+      const phLog = allLogIds.map(() => '?').join(',');
+      db.prepare(`UPDATE sync_log SET synced = 1 WHERE id IN (${phLog})`).run(...allLogIds);
+    }
+
+    return {
+      sales: salesOut,
+      payments: paymentsOut,
+      clients: clientsOut,
+      suppliers: suppliersOut,
+      supplier_payments: supplierPaymentsOut
+    };
   });
 
   try {
     const out = pull();
-    return res.json({ success: true, sales: out.sales, payments: out.payments, clients: out.clients });
+    return res.json({
+      success: true,
+      sales: out.sales,
+      payments: out.payments,
+      clients: out.clients,
+      suppliers: out.suppliers,
+      supplier_payments: out.supplier_payments
+    });
   } catch (err) {
     console.error('[sync] GET /pull error:', err.message);
     return res.status(500).json({ success: false, error: 'Sync pull failed' });

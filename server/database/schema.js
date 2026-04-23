@@ -257,6 +257,51 @@ const initDatabase = (db) => {
     console.log('[schema] clients columns migration:', e.message);
   }
 
+  // ============================================
+  // SUPPLIERS (new on mobile — mirror of desktop)
+  // Balance direction inverted from clients:
+  //   negative = shop owes this supplier
+  //   positive = shop has prepayment credit with them
+  // ============================================
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS suppliers (
+      id         INTEGER PRIMARY KEY,
+      name       TEXT    NOT NULL,
+      phone      TEXT,
+      address    TEXT,
+      email      TEXT,
+      notes      TEXT,
+      balance    REAL    DEFAULT 0,
+      remote_id  TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_suppliers_remote_id ON suppliers(remote_id) WHERE remote_id IS NOT NULL');
+
+  // ============================================
+  // SUPPLIER_PAYMENTS (new on mobile — mirror of client_payments)
+  // ============================================
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS supplier_payments (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      supplier_id INTEGER NOT NULL,
+      purchase_id INTEGER,
+      amount      REAL    NOT NULL,
+      date        DATE    NOT NULL,
+      method      TEXT    DEFAULT 'cash',
+      notes       TEXT,
+      batch_id    TEXT,
+      created_by  INTEGER,
+      remote_id   TEXT,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sp_supplier ON supplier_payments(supplier_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sp_purchase ON supplier_payments(purchase_id)');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sp_remote ON supplier_payments(remote_id) WHERE remote_id IS NOT NULL');
+
   console.log('[schema] Database initialized successfully');
 };
 
