@@ -236,6 +236,60 @@ router.post('/', (req, res) => {
 });
 
 /**
+ * PATCH /api/clients/:id
+ * Body: { name?, phone?, email?, address?, notes? }
+ *
+ * Edits a client's profile fields. Writes a sync_log row with action='update'
+ * so desktop's pull picks up the change and importRemoteClient propagates the
+ * new field values into the local mirror.
+ */
+router.patch('/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid client id' });
+  }
+
+  const fields = {};
+  if (typeof req.body?.name    === 'string') fields.name    = req.body.name.trim().slice(0, 200);
+  if (typeof req.body?.phone   === 'string') fields.phone   = req.body.phone.trim().slice(0, 50) || null;
+  if (typeof req.body?.email   === 'string') fields.email   = req.body.email.trim().slice(0, 200) || null;
+  if (typeof req.body?.address === 'string') fields.address = req.body.address.trim().slice(0, 500) || null;
+  if (typeof req.body?.notes   === 'string') fields.notes   = req.body.notes.trim().slice(0, 1000) || null;
+
+  if (Object.keys(fields).length === 0) {
+    return res.status(400).json({ success: false, error: 'No editable fields supplied' });
+  }
+  if (fields.name !== undefined && !fields.name) {
+    return res.status(400).json({ success: false, error: 'Name cannot be empty' });
+  }
+
+  try {
+    const existing = db.prepare('SELECT id FROM clients WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Client not found' });
+
+    const setClauses = Object.keys(fields).map(k => `${k} = ?`).join(', ');
+    const values = Object.values(fields);
+
+    const txn = db.transaction(() => {
+      db.prepare(`
+        UPDATE clients SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(...values, id);
+      db.prepare(`
+        INSERT INTO sync_log (entity_type, entity_id, action, synced)
+        VALUES ('client', ?, 'update', 0)
+      `).run(id);
+    });
+    txn();
+
+    const updated = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+    return res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('[clients] PATCH /:id error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update client' });
+  }
+});
+
+/**
  * PATCH /api/clients/:id/contact-note
  * Body: { note?: string }
  *
