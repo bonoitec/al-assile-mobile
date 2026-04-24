@@ -231,20 +231,20 @@ router.get('/', (req, res) => {
   }
 
   try {
-    // Exclude desktop-origin sales from the Sales page — salespeople only see
-    // their own sales here. Desktop sales are included in Reports aggregates
-    // and pulled by the desktop through /api/sync/pull; they have no edit
-    // path on mobile and would just be confusing noise in this list.
+    // Include BOTH mobile-origin and desktop-origin sales for the day.
+    // Desktop sales are read-only on mobile (mutations return 403 via the
+    // isDesktopOrigin guard below); the `origin` field lets the UI show them
+    // with a visual indicator so users know they came from the desktop POS.
     const sales = db.prepare(`
       SELECT
         s.*,
         c.name  AS client_name,
         c.phone AS client_phone,
-        (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) AS item_count
+        (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) AS item_count,
+        CASE WHEN s.remote_id LIKE 'desktop-%' THEN 'desktop' ELSE 'mobile' END AS origin
       FROM sales s
       LEFT JOIN clients c ON s.client_id = c.id
       WHERE s.date = ?
-        AND (s.remote_id IS NULL OR s.remote_id NOT LIKE 'desktop-%')
       ORDER BY s.created_at DESC
     `).all(date);
 

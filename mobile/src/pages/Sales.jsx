@@ -75,6 +75,15 @@ function SaleRow({ sale, settings, onReturn }) {
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-bold text-white">#{sale.id}</p>
               <StatusBadge status={sale.status} />
+              {sale.origin === 'desktop' && (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                  style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}
+                  title={t('desktopSaleReadonly')}
+                >
+                  {t('fromDesktop')}
+                </span>
+              )}
             </div>
             <p className="text-xs mt-0.5 truncate" style={{ color: '#4a5568' }}>
               {sale.client_name || t('walkin')} · {time}
