@@ -290,6 +290,124 @@ router.patch('/:id', (req, res) => {
 });
 
 /**
+ * DELETE /api/clients/:id
+ * Admin-only. Refuses to delete clients that have any sales — keeping the
+ * audit trail intact is more important than removing a row. For client
+ * profiles with no sales (test rows, duplicates created in the field),
+ * cascades to client_payments via FK ON DELETE CASCADE.
+ *
+ * Logs `('client', id, 'delete')` so desktop's pull (importRemoteClient
+ * delete branch) reverses its mirror.
+ */
+router.delete('/:id', (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Only admins can delete clients' });
+  }
+
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid client id' });
+  }
+
+  try {
+    const existing = db.prepare('SELECT id FROM clients WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Client not found' });
+
+    // Block delete if any sales reference this client. Sales can outlive a
+    // deleted client, but the shopkeeper should explicitly cancel/return them
+    // first — silently nulling client_id would corrupt revenue attribution.
+    const saleCount = db.prepare('SELECT COUNT(*) AS c FROM sales WHERE client_id = ?').get(id).c;
+    if (saleCount > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'Cannot delete: client has sales on record',
+      });
+    }
+
+    db.transaction(() => {
+      db.prepare('DELETE FROM clients WHERE id = ?').run(id);
+      db.prepare(`
+        INSERT INTO sync_log (entity_type, entity_id, action, synced)
+        VALUES ('client', ?, 'delete', 0)
+      `).run(id);
+    })();
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[clients] DELETE /:id error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to delete client' });
+  }
+});
+
+/**
+ * POST /api/clients/:id/adjust
+ * Body: { amount: number, reason: string }
+ *
+ * Admin-only. Records an arbitrary balance adjustment as a client_payments
+ * row with method='adjustment'. Positive amount = add credit / write-off /
+ * balance-up. Negative amount = debit / charge / balance-down. Reason is
+ * REQUIRED so every adjustment has an audit trail.
+ *
+ * Mirrors desktop's `adjustClientBalance` exactly so the same row syncs.
+ */
+router.post('/:id/adjust', (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Only admins can adjust balance' });
+  }
+
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid client id' });
+  }
+
+  const amount = Number(req.body?.amount);
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+
+  if (!Number.isFinite(amount) || amount === 0) {
+    return res.status(400).json({ success: false, error: 'Amount must be a non-zero number' });
+  }
+  if (!reason) {
+    return res.status(400).json({ success: false, error: 'Reason is required for adjustments' });
+  }
+
+  try {
+    const existing = db.prepare('SELECT id FROM clients WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Client not found' });
+
+    const date = new Date().toISOString().slice(0, 10);
+    const createdBy = req.user?.userId || null;
+
+    const tx = db.transaction(() => {
+      const payRes = db.prepare(`
+        INSERT INTO client_payments
+          (client_id, sale_id, amount, date, method, notes, batch_id, created_by)
+        VALUES (?, NULL, ?, ?, 'adjustment', ?, ?, ?)
+      `).run(id, amount, date, reason, `adjust-${id}-${Date.now()}`, createdBy);
+
+      db.prepare('UPDATE clients SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(amount, id);
+
+      db.prepare(`
+        INSERT INTO sync_log (entity_type, entity_id, action, synced)
+        VALUES ('payment', ?, 'create', 0)
+      `).run(payRes.lastInsertRowid);
+
+      return payRes.lastInsertRowid;
+    });
+
+    const paymentId = tx();
+    const updated = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+    return res.status(201).json({
+      success: true,
+      data: { client: updated, payment_id: paymentId },
+    });
+  } catch (err) {
+    console.error('[clients] POST /:id/adjust error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to adjust balance' });
+  }
+});
+
+/**
  * PATCH /api/clients/:id/contact-note
  * Body: { note?: string }
  *

@@ -405,38 +405,64 @@ router.post('/:id/payment', (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid sale id' });
   }
 
-  const { amount } = req.body;
+  const { amount, method, notes, date } = req.body;
   if (typeof amount !== 'number' || amount <= 0) {
     return res.status(400).json({ success: false, error: 'amount must be a positive number' });
   }
+  const payMethod = typeof method === 'string' && method ? method : 'cash';
+  const payNotes  = typeof notes === 'string' ? notes.trim().slice(0, 500) || null : null;
+  const payDate   = typeof date === 'string' && date ? date : new Date().toISOString().slice(0, 10);
+  const createdBy = req.user?.userId || null;
 
   const addPayment = db.transaction(() => {
     const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
     if (!sale) throw new Error('Sale not found');
     if (isDesktopOrigin(sale)) throw new Error('DESKTOP_SALE_READONLY');
 
-    const newPaid = Math.min((sale.paid_amount || 0) + amount, sale.total);
+    // Cap payment at remaining due so we never overpay a sale.
+    const remaining = Math.max(0, (sale.total || 0) - (sale.paid_amount || 0));
+    const applied = Math.min(amount, remaining);
+    if (applied <= 0) {
+      throw new Error('Sale already paid in full');
+    }
+
+    const newPaid = Math.min((sale.paid_amount || 0) + applied, sale.total);
     const status = newPaid >= sale.total ? 'paid' : newPaid > 0 ? 'partial' : 'pending';
 
     db.prepare(`
       UPDATE sales SET paid_amount = ?, status = ? WHERE id = ?
     `).run(newPaid, status, id);
 
-    // Reduce client debt
-    if (sale.client_id) {
-      const actualPayment = Math.min(amount, sale.total - (sale.paid_amount || 0));
-      if (actualPayment > 0) {
-        db.prepare(`
-          UPDATE clients SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-        `).run(actualPayment, sale.client_id);
-      }
+    // Insert ledger row so the payment shows in client history and syncs to
+    // desktop. Without this the money movement was invisible on both sides.
+    const payRes = db.prepare(`
+      INSERT INTO client_payments
+        (client_id, sale_id, amount, date, method, notes, batch_id, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      sale.client_id || null,
+      id,
+      applied,
+      payDate,
+      payMethod,
+      payNotes,
+      `sale-pay-${id}-${Date.now()}`,
+      createdBy
+    );
+
+    // Reduce client debt — balance goes up by the amount actually applied.
+    if (sale.client_id && applied > 0) {
+      db.prepare(`
+        UPDATE clients SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+      `).run(applied, sale.client_id);
     }
 
-    // Log for sync
+    // Log the new ledger row id (NOT the sale id) so desktop's pull resolves
+    // the correct client_payments row via remote_id = `mob-<payment_id>`.
     db.prepare(`
       INSERT INTO sync_log (entity_type, entity_id, action, synced)
       VALUES ('payment', ?, 'create', 0)
-    `).run(id);
+    `).run(payRes.lastInsertRowid);
 
     return db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
   });
@@ -450,6 +476,9 @@ router.post('/:id/payment', (req, res) => {
         success: false,
         error: 'Desktop sales cannot accept payments from the mobile app'
       });
+    }
+    if (err.message === 'Sale already paid in full') {
+      return res.status(409).json({ success: false, error: err.message });
     }
     console.error('[sales] POST /:id/payment error:', err.message);
     return res.status(err.message === 'Sale not found' ? 404 : 500).json({

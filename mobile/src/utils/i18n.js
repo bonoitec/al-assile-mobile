@@ -236,6 +236,29 @@ const translations = {
     sendWhatsAppReminder: 'Send WhatsApp reminder',
     whatsappReminderTemplate: 'Hi {name}, a gentle reminder you still have a balance of {amount} with our shop. Thank you.',
     reminderSentNote: 'Reminder sent via WhatsApp',
+    // Client edit + admin actions on mobile
+    editClient: 'Edit client',
+    editClientProfile: 'Edit profile',
+    saveChanges: 'Save changes',
+    failedToUpdateClient: 'Failed to update client',
+    deleteClient: 'Delete client',
+    confirmDeleteClient: 'Delete this client? Their sale history stays linked but the profile is removed.',
+    failedToDeleteClient: 'Failed to delete client',
+    cannotDeleteClientWithSales: 'Cannot delete: client has sales on record',
+    // Mobile balance adjustment (admin)
+    adjustBalance: 'Adjust balance',
+    adjustReason: 'Reason',
+    adjustReasonPlaceholder: 'Why this adjustment? (required)',
+    adjustCredit: 'Add credit',
+    adjustDebit: 'Write off / Debit',
+    adjustHelp: 'Use this for write-offs, gift credits, or balance corrections. Creates a payment row tagged adjustment.',
+    failedToAdjust: 'Failed to adjust balance',
+    // Edit supplier
+    editSupplier: 'Edit supplier',
+    failedToUpdateSupplier: 'Failed to update supplier',
+    // Edit supplier payment
+    editSupplierPayment: 'Edit payment',
+    failedToUpdatePayment: 'Failed to update payment',
     // Error / status messages surfaced to users
     bluetoothNotSupported: 'Web Bluetooth is not supported in this browser',
     printerNoCharacteristic: 'Could not find writable characteristic on printer',
@@ -621,6 +644,29 @@ const translations = {
     sendWhatsAppReminder: 'إرسال تذكير واتساب',
     whatsappReminderTemplate: 'السلام عليكم {name}، تذكير بسيط بأن لديكم رصيد غير مسدد قدره {amount} لدى المحل. شكراً لكم.',
     reminderSentNote: 'تم إرسال تذكير عبر واتساب',
+    // Client edit + admin actions on mobile
+    editClient: 'تعديل العميل',
+    editClientProfile: 'تعديل الملف',
+    saveChanges: 'حفظ التعديلات',
+    failedToUpdateClient: 'فشل تحديث العميل',
+    deleteClient: 'حذف العميل',
+    confirmDeleteClient: 'حذف هذا العميل؟ يبقى سجل المبيعات مرتبطاً ولكن يُحذف الملف.',
+    failedToDeleteClient: 'فشل حذف العميل',
+    cannotDeleteClientWithSales: 'لا يمكن الحذف: للعميل مبيعات مسجلة',
+    // Mobile balance adjustment (admin)
+    adjustBalance: 'تعديل الرصيد',
+    adjustReason: 'السبب',
+    adjustReasonPlaceholder: 'لماذا هذا التعديل؟ (مطلوب)',
+    adjustCredit: 'إضافة رصيد',
+    adjustDebit: 'شطب / خصم',
+    adjustHelp: 'استخدم هذا للشطب أو رصيد الهدية أو تصحيح الرصيد. ينشئ سطر دفع موسوم بـ adjustment.',
+    failedToAdjust: 'فشل تعديل الرصيد',
+    // Edit supplier
+    editSupplier: 'تعديل المورد',
+    failedToUpdateSupplier: 'فشل تحديث المورد',
+    // Edit supplier payment
+    editSupplierPayment: 'تعديل الدفع',
+    failedToUpdatePayment: 'فشل تحديث الدفع',
     // Error / status messages surfaced to users
     bluetoothNotSupported: 'متصفحك لا يدعم Web Bluetooth',
     printerNoCharacteristic: 'تعذّر العثور على خاصية الكتابة في الطابعة',

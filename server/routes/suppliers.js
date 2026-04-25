@@ -404,6 +404,65 @@ router.post('/:id/payments', (req, res) => {
 });
 
 /**
+ * PATCH /api/suppliers/payments/:paymentId
+ * Body: { amount?, date?, notes? }
+ * Admin-only. Adjusts a supplier_payment's amount/date/notes; balance moves
+ * by (new amount − old amount). Logs `('supplier_payment', id, 'update')`
+ * so desktop's importRemoteSupplierPayment update branch applies the same
+ * delta on the desktop side.
+ */
+router.patch('/payments/:paymentId', (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Only admins can edit supplier payments' });
+  }
+
+  const paymentId = parseInt(req.params.paymentId, 10);
+  if (!Number.isInteger(paymentId) || paymentId < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid payment id' });
+  }
+
+  try {
+    const existing = db.prepare('SELECT * FROM supplier_payments WHERE id = ?').get(paymentId);
+    if (!existing) return res.status(404).json({ success: false, error: 'Payment not found' });
+
+    const newAmount = req.body?.amount !== undefined ? Number(req.body.amount) : existing.amount;
+    const newDate   = req.body?.date  !== undefined ? String(req.body.date)  : existing.date;
+    const newNotes  = req.body?.notes !== undefined
+      ? (typeof req.body.notes === 'string' ? req.body.notes.trim().slice(0, 500) || null : null)
+      : existing.notes;
+
+    if (!Number.isFinite(newAmount) || newAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Amount must be positive' });
+    }
+
+    const delta = Math.round((newAmount - existing.amount) * 100) / 100;
+
+    db.transaction(() => {
+      // Move supplier balance by delta. (Mobile has no purchases table, so
+      // there's no purchase paid_amount to adjust — desktop handles that
+      // side via importRemoteSupplierPayment.)
+      if (delta !== 0) {
+        db.prepare('UPDATE suppliers SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(delta, existing.supplier_id);
+      }
+      db.prepare(`
+        UPDATE supplier_payments SET amount = ?, date = ?, notes = ? WHERE id = ?
+      `).run(newAmount, newDate, newNotes, paymentId);
+      db.prepare(`
+        INSERT INTO sync_log (entity_type, entity_id, action, synced)
+        VALUES ('supplier_payment', ?, 'update', 0)
+      `).run(paymentId);
+    })();
+
+    const updated = db.prepare('SELECT * FROM supplier_payments WHERE id = ?').get(paymentId);
+    return res.json({ success: true, data: updated });
+  } catch (err) {
+    console.error('[suppliers] PATCH /payments/:paymentId error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update payment' });
+  }
+});
+
+/**
  * DELETE /api/suppliers/payments/:paymentId
  * Admin-only. Reverses the ledger row's effect on the supplier balance.
  * Sales-role mutate window handled the same way payments.js does, but the

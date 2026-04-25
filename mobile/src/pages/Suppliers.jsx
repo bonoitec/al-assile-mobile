@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, X, Truck, Phone, RefreshCw, ChevronRight,
-  Wallet, History, Trash2, AlertTriangle, Loader2, PlusCircle,
+  Wallet, History, Trash2, AlertTriangle, Loader2, PlusCircle, Edit2,
 } from 'lucide-react';
 import { useApi } from '../hooks/useApi.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -304,6 +304,8 @@ function SupplierDetailSheet({ supplierId, onClose, onChanged, isAdmin }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editingPayment, setEditingPayment] = useState(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -385,13 +387,26 @@ function SupplierDetailSheet({ supplierId, onClose, onChanged, isAdmin }) {
               {supplier?.phone && <p className="text-xs truncate" style={{ color: '#6b7280' }}>{supplier.phone}</p>}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center rounded-full"
-            style={{ background: 'rgba(255,255,255,0.06)' }}
-          >
-            <X size={18} style={{ color: '#9ca3af' }} />
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {supplier && (
+              <button
+                onClick={() => setShowEdit(true)}
+                className="w-9 h-9 flex items-center justify-center rounded-full touch-manipulation"
+                style={{ background: 'rgba(255,255,255,0.06)' }}
+                title={t('editSupplier')}
+                aria-label={t('editSupplier')}
+              >
+                <Edit2 size={15} style={{ color: '#9ca3af' }} />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-9 h-9 flex items-center justify-center rounded-full"
+              style={{ background: 'rgba(255,255,255,0.06)' }}
+            >
+              <X size={18} style={{ color: '#9ca3af' }} />
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -430,6 +445,7 @@ function SupplierDetailSheet({ supplierId, onClose, onChanged, isAdmin }) {
             <HistoryTab
               payments={payments}
               onDelete={onDeletePayment}
+              onEdit={(p) => setEditingPayment(p)}
               isAdmin={isAdmin}
             />
           )}
@@ -466,6 +482,36 @@ function SupplierDetailSheet({ supplierId, onClose, onChanged, isAdmin }) {
             onClose={() => setShowPayment(false)}
             onDone={async () => {
               setShowPayment(false);
+              await reload();
+              onChanged();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit supplier profile */}
+      <AnimatePresence>
+        {showEdit && supplier && (
+          <EditSupplierSheet
+            supplier={supplier}
+            onClose={() => setShowEdit(false)}
+            onDone={async () => {
+              setShowEdit(false);
+              await reload();
+              onChanged();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit supplier_payment */}
+      <AnimatePresence>
+        {editingPayment && (
+          <EditSupplierPaymentSheet
+            payment={editingPayment}
+            onClose={() => setEditingPayment(null)}
+            onDone={async () => {
+              setEditingPayment(null);
               await reload();
               onChanged();
             }}
@@ -546,7 +592,7 @@ function OverviewTab({ supplier, isAdmin, onDelete }) {
   );
 }
 
-function HistoryTab({ payments, onDelete, isAdmin }) {
+function HistoryTab({ payments, onDelete, onEdit, isAdmin }) {
   if (payments.length === 0) {
     return (
       <div className="text-center py-8">
@@ -595,7 +641,15 @@ function HistoryTab({ payments, onDelete, isAdmin }) {
               </p>
             </div>
             {isAdmin && (
-              <div className="flex-shrink-0">
+              <div className="flex flex-col gap-1 flex-shrink-0">
+                <button
+                  onClick={() => onEdit(p)}
+                  className="p-1.5 rounded-lg touch-manipulation"
+                  style={{ background: 'rgba(255,255,255,0.05)', color: '#9ca3af' }}
+                  title={t('edit')}
+                >
+                  <Edit2 size={13} />
+                </button>
                 <button
                   onClick={() => onDelete(p)}
                   className="p-1.5 rounded-lg touch-manipulation"
@@ -1089,6 +1143,223 @@ function AddSupplierSheet({ onClose, onCreated }) {
           >
             {submitting ? <Loader2 size={18} className="animate-spin" /> : <Truck size={18} />}
             {t('addSupplier')}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ======================================================================
+// Edit supplier profile — calls PATCH /api/suppliers/:id
+// ======================================================================
+function EditSupplierSheet({ supplier, onClose, onDone }) {
+  const api = useApi();
+  const [name, setName]       = useState(supplier.name    || '');
+  const [phone, setPhone]     = useState(supplier.phone   || '');
+  const [email, setEmail]     = useState(supplier.email   || '');
+  const [address, setAddress] = useState(supplier.address || '');
+  const [notes, setNotes]     = useState(supplier.notes   || '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const canSubmit = name.trim().length > 0 && !submitting;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await api.patch(`/api/suppliers/${supplier.id}`, {
+        name:    name.trim(),
+        phone:   phone.trim() || null,
+        email:   email.trim() || null,
+        address: address.trim() || null,
+        notes:   notes.trim() || null,
+      });
+      onDone();
+    } catch (err) {
+      setError(err?.message || t('failedToUpdateSupplier'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div className="fixed inset-0 z-[60]"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+           onClick={submitting ? undefined : onClose} />
+      <motion.div
+        className="absolute inset-x-0 bottom-0 rounded-t-3xl flex flex-col"
+        style={{
+          background: '#0d1120',
+          border: '1px solid rgba(255,255,255,0.08)',
+          maxHeight: '92vh',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28 }}>
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
+        </div>
+        <div className="flex items-center justify-between px-5 py-3">
+          <h2 className="text-lg font-bold text-white">{t('editSupplier')}</h2>
+          <button onClick={onClose} disabled={submitting}
+            className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.06)', opacity: submitting ? 0.4 : 1 }}>
+            <X size={18} style={{ color: '#9ca3af' }} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto scroll-touch px-5 pb-3 space-y-3">
+          {[
+            { v: name,    set: setName,    label: t('supplierName'),  required: true, type: 'text' },
+            { v: phone,   set: setPhone,   label: t('clientPhone'),                   type: 'tel' },
+            { v: email,   set: setEmail,   label: t('email') || 'Email',              type: 'email' },
+            { v: address, set: setAddress, label: t('clientAddress'),                 type: 'text' },
+            { v: notes,   set: setNotes,   label: t('clientNotes'),                   type: 'text' },
+          ].map((f, i) => (
+            <div key={i}>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>
+                {f.label}{f.required ? <span style={{ color: '#f87171' }}> *</span> : null}
+              </label>
+              <input
+                type={f.type}
+                value={f.v}
+                onChange={e => f.set(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
+              />
+            </div>
+          ))}
+          {error ? <p className="text-xs text-center" style={{ color: '#f87171' }}>{error}</p> : null}
+        </div>
+        <div className="px-5 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <button onClick={submit} disabled={!canSubmit}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-white text-base touch-manipulation"
+            style={{
+              background: canSubmit
+                ? 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)'
+                : 'rgba(255,255,255,0.04)',
+              border: canSubmit ? '1px solid rgba(37,99,235,0.4)' : '1px solid rgba(255,255,255,0.06)',
+              opacity: canSubmit ? 1 : 0.5,
+            }}>
+            {submitting ? <Loader2 size={18} className="animate-spin" /> : <Edit2 size={16} />}
+            {submitting ? t('processing') : t('saveChanges')}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ======================================================================
+// Edit supplier_payment — admin-only. PATCH /api/suppliers/payments/:id
+// ======================================================================
+function EditSupplierPaymentSheet({ payment, onClose, onDone }) {
+  const api = useApi();
+  const [amount, setAmount] = useState(String(payment.amount));
+  const [date, setDate]     = useState((payment.date || '').slice(0, 10));
+  const [notes, setNotes]   = useState(payment.notes || '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const numeric = parseFloat((amount || '').replace(',', '.')) || 0;
+  const canSubmit = numeric > 0 && !submitting;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await api.patch(`/api/suppliers/payments/${payment.id}`, {
+        amount: numeric,
+        date,
+        notes: notes.trim(),
+      });
+      onDone();
+    } catch (err) {
+      setError(err?.message || t('failedToUpdatePayment'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div className="fixed inset-0 z-[60]"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+           onClick={submitting ? undefined : onClose} />
+      <motion.div
+        className="absolute inset-x-0 bottom-0 rounded-t-3xl flex flex-col"
+        style={{
+          background: '#0d1120',
+          border: '1px solid rgba(255,255,255,0.08)',
+          maxHeight: '92vh',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28 }}>
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
+        </div>
+        <div className="flex items-center justify-between px-5 py-3">
+          <h2 className="text-lg font-bold text-white">{t('editSupplierPayment')}</h2>
+          <button onClick={onClose} disabled={submitting}
+            className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.06)', opacity: submitting ? 0.4 : 1 }}>
+            <X size={18} style={{ color: '#9ca3af' }} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto scroll-touch px-5 pb-3 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>
+              {t('amountReceived') || 'Amount'}
+            </label>
+            <input
+              type="number" inputMode="decimal" value={amount}
+              onChange={e => setAmount(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl text-white outline-none text-2xl font-bold text-right"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>
+              {t('date') || 'Date'}
+            </label>
+            <input
+              type="date" value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl text-white outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: '#9ca3af' }}>
+              {t('clientNotes') || 'Notes'}
+            </label>
+            <input
+              type="text" value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder={t('notesOptional')}
+              className="w-full px-4 py-3 rounded-xl text-white placeholder-gray-600 outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: '16px' }}
+            />
+          </div>
+          {error ? <p className="text-xs text-center" style={{ color: '#f87171' }}>{error}</p> : null}
+        </div>
+        <div className="px-5 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <button onClick={submit} disabled={!canSubmit}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-white text-base touch-manipulation"
+            style={{
+              background: canSubmit
+                ? 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)'
+                : 'rgba(255,255,255,0.04)',
+              border: canSubmit ? '1px solid rgba(37,99,235,0.4)' : '1px solid rgba(255,255,255,0.06)',
+              opacity: canSubmit ? 1 : 0.5,
+            }}>
+            {submitting ? <Loader2 size={18} className="animate-spin" /> : <Edit2 size={16} />}
+            {submitting ? t('processing') : t('saveChanges')}
           </button>
         </div>
       </motion.div>
