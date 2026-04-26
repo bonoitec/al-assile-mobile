@@ -1681,7 +1681,7 @@ function EditClientSheet({ client, onClose, onDone }) {
         </div>
         <div className="flex-1 overflow-y-auto scroll-touch px-5 pb-3 space-y-3">
           {[
-            { v: name,    set: setName,    label: t('clientNameLabel') || 'Name', required: true, type: 'text' },
+            { v: name,    set: setName,    label: t('clientName'),                required: true, type: 'text' },
             { v: phone,   set: setPhone,   label: t('clientPhone'),               type: 'tel' },
             { v: email,   set: setEmail,   label: t('email')                || 'Email', type: 'email' },
             { v: address, set: setAddress, label: t('clientAddress'),             type: 'text' },

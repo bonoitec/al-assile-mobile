@@ -235,9 +235,28 @@ router.get('/', (req, res) => {
     // Desktop sales are read-only on mobile (mutations return 403 via the
     // isDesktopOrigin guard below); the `origin` field lets the UI show them
     // with a visual indicator so users know they came from the desktop POS.
+    //
+    // paid_amount is OVERRIDDEN with the running paid total: the at-creation
+    // cash + any post-creation client_payments rows linked to this sale.
+    // Status is derived from that. Storing only at-creation in the row keeps
+    // the desktop sync clean (sale snapshot doesn't churn on every payment).
     const sales = db.prepare(`
       SELECT
-        s.*,
+        s.id, s.client_id, s.date, s.subtotal, s.discount, s.total,
+        s.payment_method, s.notes, s.remote_id, s.created_at, s.created_by,
+        s.paid_amount AS paid_at_creation,
+        (s.paid_amount + COALESCE(
+          (SELECT SUM(amount) FROM client_payments WHERE sale_id = s.id), 0
+        )) AS paid_amount,
+        CASE
+          WHEN (s.paid_amount + COALESCE(
+            (SELECT SUM(amount) FROM client_payments WHERE sale_id = s.id), 0
+          )) >= s.total THEN 'paid'
+          WHEN (s.paid_amount + COALESCE(
+            (SELECT SUM(amount) FROM client_payments WHERE sale_id = s.id), 0
+          )) > 0 THEN 'partial'
+          ELSE 'pending'
+        END AS status,
         c.name  AS client_name,
         c.phone AS client_phone,
         (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) AS item_count,
@@ -280,6 +299,16 @@ router.get('/:id', (req, res) => {
     if (!sale) {
       return res.status(404).json({ success: false, error: 'Sale not found' });
     }
+
+    // Override paid_amount + status with the running total derived from
+    // post-creation client_payments. See GET / for rationale.
+    const postCreation = db.prepare(
+      'SELECT COALESCE(SUM(amount), 0) AS s FROM client_payments WHERE sale_id = ?'
+    ).get(id).s;
+    const paidTotal = (sale.paid_amount || 0) + postCreation;
+    sale.paid_at_creation = sale.paid_amount;
+    sale.paid_amount      = paidTotal;
+    sale.status           = paidTotal >= sale.total ? 'paid' : paidTotal > 0 ? 'partial' : 'pending';
 
     const items = db.prepare(`
       SELECT
@@ -341,18 +370,33 @@ router.delete('/:id', (req, res) => {
       );
       for (const it of items) restoreQty.run(it.quantity, it.product_id);
 
-      // 2. Reverse client balance if one was affected (mirrors the sale creation logic)
+      // 2. Reverse client balance if one was affected. Two distinct movements
+      //    were applied while this sale was alive:
+      //      (a) at-creation: balance -= (total - sale.paid_amount), or
+      //                       balance += (sale.paid_amount - total) if overpaid
+      //      (b) for each post-creation client_payments row tied to this sale:
+      //                       balance += payment.amount
+      //    To fully reverse, we undo both. (a) is computed from the sale row.
+      //    (b) is the sum of attached payments — we subtract that from balance
+      //    BEFORE the rows are deleted.
       if (sale.client_id) {
+        // (a) reverse the at-creation balance change.
         if (sale.total > sale.paid_amount) {
-          // Partial/credit: balance was decreased by (total - paid); add it back.
           const debt = sale.total - sale.paid_amount;
           db.prepare(`UPDATE clients SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
             .run(debt, sale.client_id);
         } else if (sale.paid_amount > sale.total) {
-          // Overpay: balance was increased by (paid - total); subtract it back.
           const credit = sale.paid_amount - sale.total;
           db.prepare(`UPDATE clients SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
             .run(credit, sale.client_id);
+        }
+        // (b) reverse every post-creation payment's balance contribution.
+        const postCreation = db.prepare(
+          'SELECT COALESCE(SUM(amount), 0) AS s FROM client_payments WHERE sale_id = ?'
+        ).get(id).s;
+        if (postCreation > 0) {
+          db.prepare(`UPDATE clients SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+            .run(postCreation, sale.client_id);
         }
       }
 
@@ -419,22 +463,25 @@ router.post('/:id/payment', (req, res) => {
     if (!sale) throw new Error('Sale not found');
     if (isDesktopOrigin(sale)) throw new Error('DESKTOP_SALE_READONLY');
 
-    // Cap payment at remaining due so we never overpay a sale.
-    const remaining = Math.max(0, (sale.total || 0) - (sale.paid_amount || 0));
+    // Cap payment at the REMAINING due. paid_total = at-creation paid + sum
+    // of post-creation payments. We deliberately do NOT bump sales.paid_amount
+    // here: that field represents the at-creation cash portion only, and the
+    // desktop pull derives the at-creation ledger row from it via addSale.
+    // Bumping it would cause desktop to (a) flag the sale's snapshot as
+    // 'stale' (paid_amount changed) which archives + re-inserts the sale,
+    // and (b) double-apply the payment when importRemotePayment also fires.
+    const postCreationPaid = db.prepare(
+      'SELECT COALESCE(SUM(amount), 0) AS s FROM client_payments WHERE sale_id = ?'
+    ).get(id).s;
+    const paidTotal = (sale.paid_amount || 0) + postCreationPaid;
+    const remaining = Math.max(0, (sale.total || 0) - paidTotal);
     const applied = Math.min(amount, remaining);
     if (applied <= 0) {
       throw new Error('Sale already paid in full');
     }
 
-    const newPaid = Math.min((sale.paid_amount || 0) + applied, sale.total);
-    const status = newPaid >= sale.total ? 'paid' : newPaid > 0 ? 'partial' : 'pending';
-
-    db.prepare(`
-      UPDATE sales SET paid_amount = ?, status = ? WHERE id = ?
-    `).run(newPaid, status, id);
-
     // Insert ledger row so the payment shows in client history and syncs to
-    // desktop. Without this the money movement was invisible on both sides.
+    // desktop via the payments stream.
     const payRes = db.prepare(`
       INSERT INTO client_payments
         (client_id, sale_id, amount, date, method, notes, batch_id, created_by)
@@ -464,7 +511,20 @@ router.post('/:id/payment', (req, res) => {
       VALUES ('payment', ?, 'create', 0)
     `).run(payRes.lastInsertRowid);
 
-    return db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
+    // Return the row with a recomputed paid_total + derived status so the
+    // mobile UI reflects the new state immediately. The on-disk paid_amount
+    // is intentionally unchanged (see comment above).
+    const row = db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
+    const pt = (row.paid_amount || 0) + db.prepare(
+      'SELECT COALESCE(SUM(amount), 0) AS s FROM client_payments WHERE sale_id = ?'
+    ).get(id).s;
+    return {
+      ...row,
+      paid_amount: pt,
+      paid_total:  pt,
+      paid_at_creation: row.paid_amount,
+      status: pt >= row.total ? 'paid' : pt > 0 ? 'partial' : 'pending',
+    };
   });
 
   try {
