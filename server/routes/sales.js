@@ -462,6 +462,12 @@ router.post('/:id/payment', (req, res) => {
     const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(id);
     if (!sale) throw new Error('Sale not found');
     if (isDesktopOrigin(sale)) throw new Error('DESKTOP_SALE_READONLY');
+    // Walk-in (no client) sales cannot accept post-creation payments because
+    // client_payments.client_id is NOT NULL in the schema. Without a client
+    // there's also no balance to credit. Reject with a clear 400.
+    if (sale.client_id == null) {
+      throw new Error('WALK_IN_NO_PAYMENT');
+    }
 
     // Cap payment at the REMAINING due. paid_total = at-creation paid + sum
     // of post-creation payments. We deliberately do NOT bump sales.paid_amount
@@ -539,6 +545,12 @@ router.post('/:id/payment', (req, res) => {
     }
     if (err.message === 'Sale already paid in full') {
       return res.status(409).json({ success: false, error: err.message });
+    }
+    if (err.message === 'WALK_IN_NO_PAYMENT') {
+      return res.status(400).json({
+        success: false,
+        error: 'Walk-in sales (no client) cannot accept post-creation payments. Pay in full at checkout.',
+      });
     }
     console.error('[sales] POST /:id/payment error:', err.message);
     return res.status(err.message === 'Sale not found' ? 404 : 500).json({
